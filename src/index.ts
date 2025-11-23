@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import axios from 'axios'
 
-const app = new Hono()
+const app = new Hono().basePath('/api')
 
 app.get('/', (c) => {
   return c.text('WhatsApp Bot is running! 🚀')
@@ -16,6 +16,10 @@ app.get('/webhook', (c) => {
   const verifyToken = process.env.VERIFY_TOKEN
 
   if (mode && token) {
+    console.log('mode', mode)
+    console.log('token', token)
+    console.log('challenge', challenge)
+    console.log('verifyToken', verifyToken)
     if (mode === 'subscribe' && token === verifyToken) {
       console.log('WEBHOOK_VERIFIED')
       return c.text(challenge || '')
