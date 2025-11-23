@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
+import { env } from 'hono/adapter'
 import axios from 'axios'
 
-const app = new Hono().basePath('/api')
+const app = new Hono()
 
 app.get('/', (c) => {
   return c.text('WhatsApp Bot is running! 🚀')
@@ -13,15 +14,15 @@ app.get('/webhook', (c) => {
   const token = c.req.query('hub.verify_token')
   const challenge = c.req.query('hub.challenge')
 
-  const verifyToken = process.env.VERIFY_TOKEN
+  const { VERIFY_TOKEN } = env(c)
 
   console.log('mode', mode)
   console.log('token', token)
   console.log('challenge', challenge)
-  console.log('verifyToken', verifyToken)
+  console.log('verifyToken', VERIFY_TOKEN)
 
   if (mode && token) {
-    if (mode === 'subscribe' && token === verifyToken) {
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
       console.log('WEBHOOK_VERIFIED')
       return c.text(challenge || '')
     } else {
@@ -35,6 +36,7 @@ app.get('/webhook', (c) => {
 app.post('/webhook', async (c) => {
   try {
     const body = await c.req.json()
+    const { WHATSAPP_TOKEN } = env(c)
     console.log('Incoming webhook:', JSON.stringify(body, null, 2))
 
     if (body.object) {
@@ -55,7 +57,7 @@ app.post('/webhook', async (c) => {
           method: 'POST',
           url: `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
           headers: {
-            Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+            Authorization: `Bearer ${WHATSAPP_TOKEN}`,
             'Content-Type': 'application/json',
           },
           data: {
