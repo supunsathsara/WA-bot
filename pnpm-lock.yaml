@@ -11,16 +11,10 @@ importers:
       axios:
         specifier: ^1.13.2
         version: 1.13.2
-      dotenv:
-        specifier: ^17.2.3
-        version: 17.2.3
       hono:
         specifier: ^4.10.6
         version: 4.10.6
     devDependencies:
-      '@hono/node-server':
-        specifier: ^1.19.6
-        version: 1.19.6(hono@4.10.6)
       '@types/node':
         specifier: ^20.11.17
         version: 20.19.25
@@ -189,12 +183,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@1.19.6':
-    resolution: {integrity: sha512-Shz/KjlIeAhfiuE93NDKVdZ7HdBVLQAfdbaXEaoAVO3ic9ibRSLGIQGkcBbFyuLr+7/1D5ZCINM8B+6IvXeMtw==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      hono: ^4
-
   '@types/node@20.19.25':
     resolution: {integrity: sha512-ZsJzA5thDQMSQO788d7IocwwQbI8B5OPzmqNvpf3NY/+MHDAS759Wo0gd2WQeXYt5AAAQjzcrTVC6SKCuYgoCQ==}
 
@@ -215,10 +203,6 @@ packages:
   delayed-stream@1.0.0:
     resolution: {integrity: sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==}
     engines: {node: '>=0.4.0'}
-
-  dotenv@17.2.3:
-    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
-    engines: {node: '>=12'}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -408,10 +392,6 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
-  '@hono/node-server@1.19.6(hono@4.10.6)':
-    dependencies:
-      hono: 4.10.6
-
   '@types/node@20.19.25':
     dependencies:
       undici-types: 6.21.0
@@ -436,8 +416,6 @@ snapshots:
       delayed-stream: 1.0.0
 
   delayed-stream@1.0.0: {}
-
-  dotenv@17.2.3: {}
 
   dunder-proto@1.0.1:
     dependencies:

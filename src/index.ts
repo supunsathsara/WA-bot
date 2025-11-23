@@ -77,10 +77,4 @@ app.post('/webhook', async (c) => {
     return c.text('Internal Server Error', 500)
   }
 })
-
-export { app }
-export const config = {
-  runtime: 'nodejs',
-}
-import { handle } from 'hono/vercel'
-export default handle(app)
+export default app
