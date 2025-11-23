@@ -15,11 +15,12 @@ app.get('/webhook', (c) => {
 
   const verifyToken = process.env.VERIFY_TOKEN
 
+  console.log('mode', mode)
+  console.log('token', token)
+  console.log('challenge', challenge)
+  console.log('verifyToken', verifyToken)
+
   if (mode && token) {
-    console.log('mode', mode)
-    console.log('token', token)
-    console.log('challenge', challenge)
-    console.log('verifyToken', verifyToken)
     if (mode === 'subscribe' && token === verifyToken) {
       console.log('WEBHOOK_VERIFIED')
       return c.text(challenge || '')
@@ -75,4 +76,9 @@ app.post('/webhook', async (c) => {
   }
 })
 
-export default app
+export { app }
+export const config = {
+  runtime: 'nodejs',
+}
+import { handle } from 'hono/vercel'
+export default handle(app)
