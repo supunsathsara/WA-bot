@@ -27,31 +27,45 @@ export function isTikTokUrl(url: string): boolean {
  * Extract video ID from TikTok URL
  */
 async function extractVideoId(url: string): Promise<string> {
-    // For shortened URLs (vm.tiktok.com or vt.tiktok.com), use lovetik API
+    // For shortened URLs (vm.tiktok.com or vt.tiktok.com), follow redirect to get full URL
     if (url.includes('vm.tiktok.com') || url.includes('vt.tiktok.com')) {
-        const encodedUrl = encodeURIComponent(url)
-        const res = await retryWithBackoff(async () =>
-            axios({
-                method: 'POST',
-                url: 'https://lovetik.com/api/ajax/search',
+        try {
+            // Follow redirects to get the actual TikTok URL
+            const response = await axios({
+                method: 'HEAD',
+                url: url,
+                maxRedirects: 5,
                 headers: {
-                    accept: '*/*',
-                    'accept-language': 'en-US,en;q=0.5',
-                    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'sec-fetch-dest': 'empty',
-                    'sec-fetch-mode': 'cors',
-                    'sec-fetch-site': 'same-origin',
-                    'x-requested-with': 'XMLHttpRequest',
-                    Referer: 'https://lovetik.com/',
+                    'User-Agent': randomUseragent.getRandom(),
                 },
-                data: `query=${encodedUrl}`,
             })
-        )
-
-        return res.data.vid
+            
+            // Get the final URL after redirects
+            const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL
+            
+            if (finalUrl) {
+                url = finalUrl
+            }
+        } catch (error: any) {
+            // If HEAD fails, try GET with redirect following
+            const response = await axios({
+                method: 'GET',
+                url: url,
+                maxRedirects: 5,
+                headers: {
+                    'User-Agent': randomUseragent.getRandom(),
+                },
+                validateStatus: () => true,
+            })
+            
+            const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL
+            if (finalUrl) {
+                url = finalUrl
+            }
+        }
     }
 
-    // For regular TikTok URLs, extract from path
+    // Extract video ID from the URL path
     const videoIdMatch = url.match(/\/video\/(\d+)/)
     if (!videoIdMatch) {
         throw new Error('Could not extract video ID from TikTok URL')
