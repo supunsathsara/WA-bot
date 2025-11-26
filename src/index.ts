@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
 import { handleIncomingMessage } from './handlers/message.js'
-import { fetchInstagramVideo, isInstagramUrl } from './services/instagram.js'
+import { fetchInstagramMedia, isInstagramUrl } from './services/instagram.js'
 import { fetchTikTokVideo, isTikTokUrl } from './services/tiktok.js'
 
 const app = new Hono()
@@ -28,15 +28,16 @@ app.get('/test', async (c) => {
   try {
     if (isInstagramUrl(url)) {
       console.log('Testing Instagram URL:', url)
-      const video = await fetchInstagramVideo(url)
+      const media = await fetchInstagramMedia(url)
       return c.json({
         platform: 'instagram',
         success: true,
         data: {
-          videoUrl: video.videoUrl,
-          author: video.author,
-          description: video.description.substring(0, 200) + (video.description.length > 200 ? '...' : ''),
-          thumbnail: video.thumbnail
+          type: media.type,
+          mediaUrls: media.mediaUrls,
+          author: media.author,
+          description: media.description.substring(0, 200) + (media.description.length > 200 ? '...' : ''),
+          thumbnail: media.thumbnail
         }
       })
     } else if (isTikTokUrl(url)) {

@@ -1,8 +1,9 @@
 import axios from 'axios'
 import { retryWithBackoff } from '../utils/retry.js'
 
-export interface InstagramVideo {
-    videoUrl: string
+export interface InstagramMedia {
+    type: 'video' | 'image'
+    mediaUrls: string[]
     author: {
         username: string
     }
@@ -23,9 +24,9 @@ export function isInstagramUrl(url: string): boolean {
 }
 
 /**
- * Fetch Instagram video using thesocialcat API
+ * Fetch Instagram media (video or image) using thesocialcat API
  */
-export async function fetchInstagramVideo(url: string): Promise<InstagramVideo> {
+export async function fetchInstagramMedia(url: string): Promise<InstagramMedia> {
     const response = await retryWithBackoff(async () =>
         axios({
             method: 'POST',
@@ -50,12 +51,15 @@ export async function fetchInstagramVideo(url: string): Promise<InstagramVideo> 
 
     const data = response.data
 
-    if (data.type !== 'video' || !data.mediaUrls?.[0]) {
-        throw new Error('Failed to fetch Instagram video. The post may not contain a video.')
+    if (!data.mediaUrls?.length) {
+        throw new Error('Failed to fetch Instagram media. The post may be private or unavailable.')
     }
 
+    const type = data.type === 'video' ? 'video' : 'image'
+
     return {
-        videoUrl: data.mediaUrls[0],
+        type,
+        mediaUrls: data.mediaUrls,
         author: {
             username: data.username || 'Unknown',
         },

@@ -70,3 +70,37 @@ export async function sendVideoMessage(
         })
     })
 }
+
+/**
+ * Send an image message via WhatsApp API
+ */
+export async function sendImageMessage(
+    config: WhatsAppConfig,
+    to: string,
+    imageUrl: string,
+    caption?: string,
+    replyToMessageId?: string
+): Promise<void> {
+    await retryWithBackoff(async () => {
+        await axios({
+            method: 'POST',
+            url: `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/messages`,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${config.accessToken}`,
+            },
+            data: {
+                messaging_product: 'whatsapp',
+                to,
+                type: 'image',
+                image: {
+                    link: imageUrl,
+                    ...(caption && { caption }),
+                },
+                ...(replyToMessageId && {
+                    context: { message_id: replyToMessageId },
+                }),
+            },
+        })
+    })
+}

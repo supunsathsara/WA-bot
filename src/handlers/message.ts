@@ -1,8 +1,8 @@
 import { Context } from 'hono'
 import { env } from 'hono/adapter'
 import { isTikTokUrl, fetchTikTokVideo } from '../services/tiktok.js'
-import { isInstagramUrl, fetchInstagramVideo } from '../services/instagram.js'
-import { sendTextMessage, sendVideoMessage } from '../services/whatsapp.js'
+import { isInstagramUrl, fetchInstagramMedia } from '../services/instagram.js'
+import { sendTextMessage, sendVideoMessage, sendImageMessage } from '../services/whatsapp.js'
 
 /**
  * Handle incoming WhatsApp messages
@@ -53,25 +53,36 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
 
             console.log('TikTok video sent successfully')
         } else if (isInstagramUrl(messageBody)) {
-            console.log('Instagram URL detected, downloading video...')
+            console.log('Instagram URL detected, downloading media...')
 
-            // Fetch Instagram video
-            const video = await fetchInstagramVideo(messageBody)
+            // Fetch Instagram media
+            const media = await fetchInstagramMedia(messageBody)
 
-            console.log('✅ Instagram video fetched successfully:')
+            console.log(`✅ Instagram ${media.type} fetched successfully:`)
+            console.log('  Type:', media.type)
+            console.log('  Author:', `@${media.author.username}`)
+            console.log('  Media count:', media.mediaUrls.length)
 
             // Format caption (truncate if too long)
             const maxCaptionLength = 500
-            const truncatedDescription = video.description.length > maxCaptionLength
-                ? video.description.substring(0, maxCaptionLength) + '...'
-                : video.description
+            const truncatedDescription = media.description.length > maxCaptionLength
+                ? media.description.substring(0, maxCaptionLength) + '...'
+                : media.description
 
-            const caption = `📸 Instagram\n@${video.author.username}\n\n${truncatedDescription}`
+            const caption = `📸 Instagram\n@${media.author.username}\n\n${truncatedDescription}`
 
-            // Send video to user
-            await sendVideoMessage(config, from, video.videoUrl, caption, messageId)
-
-            console.log('Instagram video sent successfully')
+            // Send media based on type
+            if (media.type === 'video') {
+                await sendVideoMessage(config, from, media.mediaUrls[0], caption, messageId)
+                console.log('Instagram video sent successfully')
+            } else {
+                // Send all images (for carousel posts)
+                for (let i = 0; i < media.mediaUrls.length; i++) {
+                    const imageCaption = i === 0 ? caption : undefined // Only add caption to first image
+                    await sendImageMessage(config, from, media.mediaUrls[i], imageCaption, messageId)
+                }
+                console.log(`Instagram image(s) sent successfully (${media.mediaUrls.length} images)`)
+            }
         } else {
             // Echo back regular messages
             await sendTextMessage(
