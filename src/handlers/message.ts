@@ -1,6 +1,7 @@
 import { Context } from 'hono'
 import { env } from 'hono/adapter'
 import { isTikTokUrl, fetchTikTokVideo } from '../services/tiktok.js'
+import { isInstagramUrl, fetchInstagramVideo } from '../services/instagram.js'
 import { sendTextMessage, sendVideoMessage } from '../services/whatsapp.js'
 
 /**
@@ -32,23 +33,17 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
     console.log(`Received message from ${from}: ${messageBody}`)
 
     try {
+        const config = {
+            phoneNumberId,
+            accessToken: WHATSAPP_TOKEN,
+        }
+
         // Check if the message contains a TikTok URL
         if (isTikTokUrl(messageBody)) {
             console.log('TikTok URL detected, downloading video...')
 
-            const config = {
-                phoneNumberId,
-                accessToken: WHATSAPP_TOKEN,
-            }
-
             // Fetch TikTok video
             const video = await fetchTikTokVideo(messageBody)
-
-            console.log('✅ TikTok video fetched successfully:')
-            console.log('  Author:', video.author.nickname, `(@${video.author.username})`)
-            console.log('  Description:', video.description)
-            console.log('  Created:', video.createdAt.toDateString())
-            console.log('  Video URL:', video.videoUrl)
 
             // Format caption
             const caption = `${video.author.nickname}\n@${video.author.username}\n\n${video.description}\n\n${video.createdAt.toDateString()}`
@@ -57,6 +52,26 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
             await sendVideoMessage(config, from, video.videoUrl, caption, messageId)
 
             console.log('TikTok video sent successfully')
+        } else if (isInstagramUrl(messageBody)) {
+            console.log('Instagram URL detected, downloading video...')
+
+            // Fetch Instagram video
+            const video = await fetchInstagramVideo(messageBody)
+
+            console.log('✅ Instagram video fetched successfully:')
+
+            // Format caption (truncate if too long)
+            const maxCaptionLength = 500
+            const truncatedDescription = video.description.length > maxCaptionLength
+                ? video.description.substring(0, maxCaptionLength) + '...'
+                : video.description
+
+            const caption = `📸 Instagram\n@${video.author.username}\n\n${truncatedDescription}`
+
+            // Send video to user
+            await sendVideoMessage(config, from, video.videoUrl, caption, messageId)
+
+            console.log('Instagram video sent successfully')
         } else {
             // Echo back regular messages
             await sendTextMessage(

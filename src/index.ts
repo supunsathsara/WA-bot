@@ -1,11 +1,78 @@
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
 import { handleIncomingMessage } from './handlers/message.js'
+import { fetchInstagramVideo, isInstagramUrl } from './services/instagram.js'
+import { fetchTikTokVideo, isTikTokUrl } from './services/tiktok.js'
 
 const app = new Hono()
 
 app.get('/', (c) => {
   return c.text('WhatsApp Bot is running! 🚀')
+})
+
+// Test endpoint for video fetching
+app.get('/test', async (c) => {
+  const url = c.req.query('url')
+
+  if (!url) {
+    return c.json({
+      error: 'Missing URL parameter',
+      usage: '/test?url=<instagram_or_tiktok_url>',
+      examples: [
+        '/test?url=https://www.instagram.com/reel/ABC123/',
+        '/test?url=https://www.tiktok.com/@user/video/123456'
+      ]
+    }, 400)
+  }
+
+  try {
+    if (isInstagramUrl(url)) {
+      console.log('Testing Instagram URL:', url)
+      const video = await fetchInstagramVideo(url)
+      return c.json({
+        platform: 'instagram',
+        success: true,
+        data: {
+          videoUrl: video.videoUrl,
+          author: video.author,
+          description: video.description.substring(0, 200) + (video.description.length > 200 ? '...' : ''),
+          thumbnail: video.thumbnail
+        }
+      })
+    } else if (isTikTokUrl(url)) {
+      console.log('Testing TikTok URL:', url)
+      const video = await fetchTikTokVideo(url)
+      return c.json({
+        platform: 'tiktok',
+        success: true,
+        data: {
+          videoUrl: video.videoUrl,
+          author: video.author,
+          description: video.description,
+          createdAt: video.createdAt.toISOString()
+        }
+      })
+    } else {
+      return c.json({
+        error: 'Unsupported URL',
+        message: 'Please provide a valid Instagram or TikTok URL',
+        supportedPatterns: [
+          'instagram.com/reel/...',
+          'instagram.com/p/...',
+          'instagram.com/tv/...',
+          'tiktok.com/@user/video/...',
+          'vm.tiktok.com/...',
+          'vt.tiktok.com/...'
+        ]
+      }, 400)
+    }
+  } catch (error: any) {
+    console.error('Test endpoint error:', error)
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to fetch video'
+    }, 500)
+  }
 })
 
 // Webhook verification
