@@ -2,6 +2,7 @@ import { Context } from 'hono'
 import { env } from 'hono/adapter'
 import { isTikTokUrl, fetchTikTokVideo } from '../services/tiktok.js'
 import { isInstagramUrl, fetchInstagramMedia } from '../services/instagram.js'
+import { fetchTrainAvailability, formatTrainMessage } from '../services/train.js'
 import { sendTextMessage, sendVideoMessage, sendImageMessage } from '../services/whatsapp.js'
 
 /**
@@ -38,8 +39,28 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
             accessToken: WHATSAPP_TOKEN,
         }
 
+        // Handle /train command
+        if (messageBody.toLowerCase().startsWith('/train')) {
+            console.log('Train command received, fetching availability...')
+
+            // Parse optional date from command (e.g., /train 2025-12-08)
+            const parts = messageBody.split(' ')
+            const dateArg = parts[1] // Optional date argument
+
+            // Validate date format if provided
+            let searchDate: string | undefined
+            if (dateArg && /^\d{4}-\d{2}-\d{2}$/.test(dateArg)) {
+                searchDate = dateArg
+            }
+
+            const result = await fetchTrainAvailability('47', '1', searchDate, 1)
+            const message = formatTrainMessage(result)
+
+            await sendTextMessage(config, from, message, messageId)
+            console.log('Train availability sent successfully')
+        }
         // Check if the message contains a TikTok URL
-        if (isTikTokUrl(messageBody)) {
+        else if (isTikTokUrl(messageBody)) {
             console.log('TikTok URL detected, downloading video...')
 
             // Fetch TikTok video
