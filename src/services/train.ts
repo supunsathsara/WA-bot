@@ -129,7 +129,12 @@ function parseTrainHtml(html: string, date: string): TrainSearchResult {
         // Parse train name and route
         const trainNameMatch = trainNameRaw.match(/(\d+)\s*([\w\s]+Train)\s*-\s*<br>([\s\S]*?)(?:<br>|$)/)
         const trainName = trainNameMatch ? `${trainNameMatch[2].trim()}` : 'Unknown'
-        const route = trainNameMatch ? trainNameMatch[3].replace(/<br>/g, '').trim() : ''
+        // Clean up route - remove extra whitespace, newlines, and normalize spaces
+        const routeRaw = trainNameMatch ? trainNameMatch[3] : ''
+        const route = routeRaw
+            .replace(/<br>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
 
         // Parse class
         const classMatch = classRaw.match(/<span[^>]*>([\w\s]+)<span>/)
