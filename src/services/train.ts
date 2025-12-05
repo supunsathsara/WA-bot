@@ -10,6 +10,16 @@ export interface TrainInfo {
     class: string
     availableSeats: number
     price: string
+    seatPrediction?: SeatPrediction
+}
+
+export interface SeatPrediction {
+    nextSeatNumber: number
+    compartment: 'A' | 'B'
+    seatInCompartment: number
+    seatType: 'Window' | 'Aisle'
+    row: number
+    position: 'Window-Left' | 'Aisle-Left' | 'Aisle-Right' | 'Window-Right'
 }
 
 export interface TrainSearchResult {
@@ -22,6 +32,78 @@ export interface TrainSearchResult {
 
 // Target train number to track
 const TARGET_TRAIN = '8059'
+
+// Total seats in AC Saloon compartment
+const TOTAL_SEATS = 104
+const SEATS_PER_COMPARTMENT = 52
+
+/**
+ * Predict seat number and type based on availability
+ * 
+ * Seat layout (per row of 4 seats):
+ * | Window | Aisle | | Aisle | Window |
+ * |   1    |   2   | |   3   |   4    |  <- Row 1
+ * |   5    |   6   | |   7   |   8    |  <- Row 2
+ * 
+ * Window seats: n % 4 === 1 or n % 4 === 0
+ * Aisle seats: n % 4 === 2 or n % 4 === 3
+ * 
+ * Compartment A: seats 1-52
+ * Compartment B: seats 53-104
+ */
+function predictSeat(availableSeats: number): SeatPrediction | undefined {
+    if (availableSeats <= 0 || availableSeats > TOTAL_SEATS) {
+        return undefined
+    }
+
+    // Seats are issued in order, so next seat = total - available + 1
+    const seatsTaken = TOTAL_SEATS - availableSeats
+    const nextSeatNumber = seatsTaken + 1
+
+    // Determine compartment
+    const compartment: 'A' | 'B' = nextSeatNumber <= SEATS_PER_COMPARTMENT ? 'A' : 'B'
+    const seatInCompartment = compartment === 'A' ? nextSeatNumber : nextSeatNumber - SEATS_PER_COMPARTMENT
+
+    // Determine row (1-13 per compartment, 4 seats per row)
+    const row = Math.ceil(seatInCompartment / 4)
+
+    // Determine seat type based on position in row
+    const positionInRow = ((seatInCompartment - 1) % 4) + 1 // 1, 2, 3, or 4
+
+    let seatType: 'Window' | 'Aisle'
+    let position: 'Window-Left' | 'Aisle-Left' | 'Aisle-Right' | 'Window-Right'
+
+    switch (positionInRow) {
+        case 1:
+            seatType = 'Window'
+            position = 'Window-Left'
+            break
+        case 2:
+            seatType = 'Aisle'
+            position = 'Aisle-Left'
+            break
+        case 3:
+            seatType = 'Aisle'
+            position = 'Aisle-Right'
+            break
+        case 4:
+            seatType = 'Window'
+            position = 'Window-Right'
+            break
+        default:
+            seatType = 'Aisle'
+            position = 'Aisle-Left'
+    }
+
+    return {
+        nextSeatNumber,
+        compartment,
+        seatInCompartment,
+        seatType,
+        row,
+        position,
+    }
+}
 
 // Station codes
 const STATIONS: Record<string, string> = {
@@ -148,6 +230,9 @@ function parseTrainHtml(html: string, date: string): TrainSearchResult {
         const priceMatch = priceRaw.match(/LKR\s*([\d,]+\.?\d*)/)
         const price = priceMatch ? `LKR ${priceMatch[1]}` : 'Unknown'
 
+        // Predict seat number and type
+        const seatPrediction = predictSeat(availableSeats)
+
         trains.push({
             trainNumber,
             trainName,
@@ -157,6 +242,7 @@ function parseTrainHtml(html: string, date: string): TrainSearchResult {
             class: trainClass,
             availableSeats,
             price,
+            seatPrediction,
         })
     }
 
@@ -191,6 +277,17 @@ export function formatTrainMessage(result: TrainSearchResult): string {
         message += `💺 Class: ${t.class}\n`
         message += `✅ *Available: ${t.availableSeats} seats*\n`
         message += `💰 Price: ${t.price}\n`
+        
+        // Add seat prediction
+        if (t.seatPrediction) {
+            const sp = t.seatPrediction
+            const seatEmoji = sp.seatType === 'Window' ? '🪟' : '🚶'
+            message += `\n🎫 *Your Predicted Seat:*\n`
+            message += `   Seat #${sp.nextSeatNumber} (${sp.compartment}-${sp.seatInCompartment})\n`
+            message += `   ${seatEmoji} *${sp.seatType}* (${sp.position})\n`
+            message += `   Row ${sp.row} in Compartment ${sp.compartment}\n`
+        }
+        
         message += `━━━━━━━━━━━━━━━\n\n`
     } else {
         message += `❌ Target train ${TARGET_TRAIN} not found\n\n`
