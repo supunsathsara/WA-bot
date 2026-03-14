@@ -3,6 +3,8 @@
   "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "axios": "^1.13.2",
     "hono": "^4.10.6",
     "random-useragent": "^0.5.0"

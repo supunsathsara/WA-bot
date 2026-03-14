@@ -4,14 +4,15 @@ import { isTikTokUrl, fetchTikTokVideo } from '../services/tiktok.js'
 import { isInstagramUrl, fetchInstagramMedia } from '../services/instagram.js'
 import { fetchTrainAvailability, formatTrainMessage } from '../services/train.js'
 import { sendTextMessage, sendVideoMessage, sendImageMessage } from '../services/whatsapp.js'
-import { initSupabase, tryInsertMessageLog, logErrorEvent } from '../services/supabase.js'
+import { initSupabase, logIncomingMessage, logErrorEvent } from '../services/supabase.js'
 import { seedFromEnv, isAllowed, addAllowedNumber, removeAllowedNumber } from '../services/allowlist.js'
+import { initRedis, tryProcessMessage, hasUserBeenNotified, markUserAsNotified, checkRateLimit, hasUserHitLimitWarning, markUserLimitWarned } from '../services/redis.js'
 
 /**
  * Handle incoming WhatsApp messages
  */
 export async function handleIncomingMessage(c: Context, body: any): Promise<void> {
-    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER } = env(c) as any
+    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER, REDIS_URL } = env(c) as any
 
     // Check if this is a valid message webhook
     if (!body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
@@ -24,31 +25,22 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
     const from = message.from
     const messageId = message.id
 
-    // ─── Initialize Supabase ───────────────────────────────────────────────────
+    // ─── Initialize Services ───────────────────────────────────────────────────
+    initRedis(REDIS_URL)
+
     if (SUPABASE_PROJECT_ID && SUPABASE_SECRET_KEY) {
         initSupabase(SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY)
     }
 
-    // ─── Seed allowlist cache from env ────────────────────────────────────────
-    // This is fast (in-memory only) and idempotent — safe to call every invocation
-    seedFromEnv(ALLOWED_NUMBERS, ADMIN_NUMBER)
-
-    // ─── Allowlist check ──────────────────────────────────────────────────────
-    // Admin always bypasses — checked before the allowlist query
-    const isAdmin = ADMIN_NUMBER && from === ADMIN_NUMBER.trim()
-
-    if (!isAdmin) {
-        const allowed = await isAllowed(from, ALLOWED_NUMBERS)
-        if (!allowed) {
-            // Silently drop — no reply, no API usage, no logs
-            console.log(`[allowlist] Blocked message from unknown number: ${from}`)
-            return
-        }
+    // ─── Deduplication guard (Redis) ──────────────────────────────────────────
+    // Atomically check and mark messageId in Redis (24h TTL).
+    // If it returns false, this webhook is a duplicate delivery — bail out instantly.
+    const isNewMessage = await tryProcessMessage(messageId)
+    if (!isNewMessage) {
+        return
     }
 
-    // ─── Deduplication guard ──────────────────────────────────────────────────
-    // Synchronously insert the message log row. If message_id already exists
-    // (duplicate webhook delivery), tryInsertMessageLog returns false and we stop.
+    // ─── Fire-and-forget raw message logging (Supabase) ──────────────────────
     let contentStr = ''
     if (message.type === 'text') {
         contentStr = message.text?.body ?? ''
@@ -58,17 +50,65 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
         contentStr = `[${message.type} message]`
     }
 
-    if (SUPABASE_PROJECT_ID && SUPABASE_SECRET_KEY) {
-        const isNew = await tryInsertMessageLog({
-            phone_number_id: phoneNumberId,
-            sender_number: from,
-            message_id: messageId,
-            message_type: message.type,
-            content: contentStr,
-        })
+    logIncomingMessage({
+        phone_number_id: phoneNumberId,
+        sender_number: from,
+        message_id: messageId,
+        message_type: message.type,
+        content: contentStr,
+    })
 
-        if (!isNew) {
-            // Already processed — duplicate webhook delivery, bail out
+    // ─── Seed allowlist cache from env ────────────────────────────────────────
+    seedFromEnv(ALLOWED_NUMBERS, ADMIN_NUMBER)
+
+    // ─── Allowlist check ──────────────────────────────────────────────────────
+    // Admin always bypasses — checked before the allowlist query
+    const isAdmin = ADMIN_NUMBER && from === ADMIN_NUMBER.trim()
+
+    if (!isAdmin) {
+        const allowed = await isAllowed(from, ALLOWED_NUMBERS)
+        if (!allowed) {
+            console.log(`[allowlist] Blocked message from unknown number: ${from}`)
+
+            // Only send the rejection message once per 24 hours per number (via Redis)
+            if (message.type === 'text') {
+                const alreadyNotified = await hasUserBeenNotified(from)
+                if (!alreadyNotified) {
+                    await markUserAsNotified(from)
+                    const config = { phoneNumberId, accessToken: WHATSAPP_TOKEN }
+                    await sendTextMessage(
+                        config,
+                        from,
+                        '🔒 *Access Restricted*\n\n' +
+                        'Sorry, this bot is currently private.\n' +
+                        'Please contact the bot admin to get access.',
+                        messageId
+                    )
+                }
+            }
+            return
+        }
+
+        // ─── Rate Limit check ──────────────────────────────────────────────────
+        // Allowed users are subject to a daily message limit to protect quotas
+        const ratelimitResult = await checkRateLimit(from)
+        if (!ratelimitResult.success) {
+            console.log(`[ratelimit] User ${from} hit daily limit`)
+            if (message.type === 'text') {
+                const alreadyWarned = await hasUserHitLimitWarning(from)
+                if (!alreadyWarned) {
+                    await markUserLimitWarned(from)
+                    const config = { phoneNumberId, accessToken: WHATSAPP_TOKEN }
+                    await sendTextMessage(
+                        config,
+                        from,
+                        '⚠️ *Daily Limit Reached*\n\n' +
+                        'You have used your daily message quota.\n' +
+                        'Please try again tomorrow!',
+                        messageId
+                    )
+                }
+            }
             return
         }
     }
@@ -179,20 +219,52 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
 
         // ─── Help / default ─────────────────────────────────────────────────
         else {
-            const helpText = [
-                '👋 Hi! Here\'s what I can do:',
+            const lines = [
+                '👋 *Hey there! Welcome to WA Bot* 🤖',
                 '',
-                '🚂 */train* — Check train availability (tomorrow)',
-                '🚂 */train YYYY-MM-DD* — Check for a specific date',
-                '🎵 Send a *TikTok link* — I\'ll download the video',
-                '📸 Send an *Instagram link* — I\'ll send the photo/video',
-                isAdmin ? '' : '',
-                isAdmin ? '⚙️ *Admin commands:*' : '',
-                isAdmin ? '• /allow <number> — Add a number to the allowlist' : '',
-                isAdmin ? '• /remove <number> — Remove a number' : '',
-            ].filter(line => line !== undefined && !(line === '' && !isAdmin)).join('\n').trim()
+                '━━━━━━━━━━━━━━━━━━━━',
+                '',
+                '📋 *Available Commands*',
+                '',
+                '🚂  `/train`',
+                '      _Check train availability for tomorrow_',
+                '',
+                '🚂  `/train 2025-12-25`',
+                '      _Check for a specific date_',
+                '',
+                '━━━━━━━━━━━━━━━━━━━━',
+                '',
+                '🔗 *Media Downloads*',
+                '',
+                '🎵  Send a *TikTok* link',
+                '      _I\'ll extract and send the video_',
+                '',
+                '📸  Send an *Instagram* link',
+                '      _I\'ll send the photo or video_',
+            ]
 
-            await sendTextMessage(config, from, helpText, messageId)
+            if (isAdmin) {
+                lines.push(
+                    '',
+                    '━━━━━━━━━━━━━━━━━━━━',
+                    '',
+                    '⚙️ *Admin Commands*',
+                    '',
+                    '🔓  `/allow <number>`',
+                    '      _Add a number to the allowlist_',
+                    '',
+                    '🔒  `/remove <number>`',
+                    '      _Remove a number from the allowlist_',
+                )
+            }
+
+            lines.push(
+                '',
+                '━━━━━━━━━━━━━━━━━━━━',
+                '_Just send a command or link to get started!_ ✨',
+            )
+
+            await sendTextMessage(config, from, lines.join('\n'), messageId)
         }
 
     } catch (error: any) {
