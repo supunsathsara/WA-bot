@@ -152,8 +152,22 @@ export async function fetchTrainAvailability(
         date = getNextMonday()
     }
 
-    const response = await retryWithBackoff(async () =>
-        axios({
+    const html = await retryWithBackoff(async () => {
+        // Step 1: Get CSRF token and session cookie
+        const resGet = await axios.get('https://seatreservation.railway.gov.lk/mtktwebslr/', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+            }
+        });
+        
+        const cookies = resGet.headers['set-cookie'] || [];
+        const cookieStr = cookies.map(c => c.split(';')[0]).join('; ');
+        
+        const csrfMatch = resGet.data.match(/<meta name="_csrf" content="([^"]+)"\/>/);
+        const csrfToken = csrfMatch ? csrfMatch[1] : '';
+
+        // Step 2: Post the search request
+        const resPost = await axios({
             method: 'POST',
             url: 'https://seatreservation.railway.gov.lk/mtktwebslr/dashboard',
             headers: {
@@ -162,8 +176,10 @@ export async function fetchTrainAvailability(
                 'Cache-Control': 'max-age=0',
                 'Connection': 'keep-alive',
                 'Content-Type': 'application/x-www-form-urlencoded',
+                'Cookie': cookieStr,
+                'X-CSRF-TOKEN': csrfToken,
                 'Origin': 'https://seatreservation.railway.gov.lk',
-                'Referer': 'https://seatreservation.railway.gov.lk/mtktwebslr/dashboard',
+                'Referer': 'https://seatreservation.railway.gov.lk/mtktwebslr/',
                 'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
                 'Sec-Fetch-Site': 'same-origin',
@@ -178,10 +194,11 @@ export async function fetchTrainAvailability(
                 noOfUsers: passengers.toString(),
                 retDate: '',
             }).toString(),
-        })
-    )
+        });
+        
+        return resPost.data as string;
+    });
 
-    const html = response.data as string
     return parseTrainHtml(html, date)
 }
 

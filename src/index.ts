@@ -3,6 +3,7 @@ import { env } from 'hono/adapter'
 import { handleIncomingMessage } from './handlers/message.js'
 import { fetchInstagramMedia, isInstagramUrl } from './services/instagram.js'
 import { fetchTikTokVideo, isTikTokUrl } from './services/tiktok.js'
+import { fetchTrainAvailability, formatTrainMessage } from './services/train.js'
 
 const app = new Hono()
 
@@ -72,6 +73,28 @@ app.get('/test', async (c) => {
     return c.json({
       success: false,
       error: error.message || 'Failed to fetch video'
+    }, 500)
+  }
+})
+
+// Test endpoint for train availability
+app.get('/train', async (c) => {
+  const date = c.req.query('date') // Optional: YYYY-MM-DD format
+
+  try {
+    console.log('Testing train availability for date:', date || 'tomorrow')
+    const result = await fetchTrainAvailability('47', '1', date, 1)
+    
+    return c.json({
+      success: true,
+      data: result,
+      formattedMessage: formatTrainMessage(result)
+    })
+  } catch (error: any) {
+    console.error('Train endpoint error:', error)
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to fetch train data'
     }, 500)
   }
 })
