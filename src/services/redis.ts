@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis'
 import { Ratelimit } from '@upstash/ratelimit'
+import { logger } from '../utils/logger.js'
 
 let redis: Redis | null = null
 let ratelimit: Ratelimit | null = null
@@ -31,9 +32,9 @@ export function initRedis(urlStr: string | undefined): void {
                 prefix: 'wa_bot_ratelimit',
             })
 
-            console.log(`[redis] Initialized Redis connection and Ratelimit (${dailyLimit} msgs/day)`)
+            logger.info('Redis', 'Upstash Redis and Ratelimit initialized.')
         } catch (e) {
-            console.error('[redis] Initialization failed:', e)
+            logger.error('Redis', 'Failed to initialize Upstash Redis:', e)
         }
     }
 }
@@ -56,12 +57,13 @@ export async function tryProcessMessage(messageId: string): Promise<boolean> {
 
         const isNew = result === 'OK'
         if (!isNew) {
-            console.log(`[dedup] Redis dropped duplicate message_id: ${messageId}`)
+            logger.info('Redis', `Dropped duplicate message_id: ${messageId}`)
         }
         return isNew
     } catch (e) {
-        console.error('[dedup] Redis error:', e)
-        return true // Fail open
+        logger.error('Redis', 'Error in tryProcessMessage (deduplication)', e)
+        // Fail-open: if Redis is down, process message rather than dropping it silently.
+        return true
     }
 }
 
@@ -76,8 +78,8 @@ export async function hasUserBeenNotified(phoneNumber: string): Promise<boolean>
         const exists = await redis.get(key)
         return exists !== null
     } catch (e) {
-        console.error('[redis] Error checking notified status:', e)
-        return false
+        logger.error('Redis', 'Error checking notified blocked status', e)
+        return false // fail-open
     }
 }
 
@@ -91,7 +93,7 @@ export async function markUserAsNotified(phoneNumber: string): Promise<void> {
         const key = `notified_blocked:${phoneNumber}`
         await redis.set(key, '1', { ex: 86400 }) // 24 hours TTL
     } catch (e) {
-        console.error('[redis] Error marking user notified:', e)
+        logger.error('Redis', 'Error marking user notified', e)
     }
 }
 
@@ -110,8 +112,9 @@ export async function checkRateLimit(phoneNumber: string) {
     try {
         return await ratelimit.limit(phoneNumber)
     } catch (e) {
-        console.error('[ratelimit] Error checking limit:', e)
-        return { success: true, limit: 0, remaining: 0, reset: 0 } // Fail open on error
+        logger.error('Redis', `Ratelimit check failed for ${phoneNumber}`, e)
+        // Default to allow if Redis is down temporarily
+        return { success: true, limit: 0, remaining: 0, reset: 0 }
     }
 }
 
@@ -156,7 +159,7 @@ export async function getTrainSession(phoneNumber: string): Promise<TrainSession
         const data = await redis.get<TrainSession>(key)
         return data || null
     } catch (e) {
-        console.error('[redis] error getting train session', e)
+        logger.error('Redis', 'Error getting train session', e)
         return null
     }
 }
@@ -171,7 +174,7 @@ export async function setTrainSession(phoneNumber: string, session: TrainSession
         const key = `train_session:${phoneNumber}`
         await redis.set(key, session, { ex: 600 })
     } catch (e) {
-        console.error('[redis] error setting train session', e)
+        logger.error('Redis', 'Error setting train session', e)
     }
 }
 
@@ -184,6 +187,6 @@ export async function clearTrainSession(phoneNumber: string): Promise<void> {
         const key = `train_session:${phoneNumber}`
         await redis.del(key)
     } catch (e) {
-        console.error('[redis] error clearing train session', e)
+        logger.error('Redis', 'Error clearing train session', e)
     }
 }

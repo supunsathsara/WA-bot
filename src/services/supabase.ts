@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '../utils/logger.js'
 
 // Simple interface for message logs
 export interface MessageLog {
@@ -55,10 +56,10 @@ export function logIncomingMessage(log: MessageLog) {
                 .insert([log])
 
             if (error) {
-                console.error('Supabase message logic logging error:', error.message)
+                logger.error('Supabase', 'Supabase message logic logging error:', error.message)
             }
         } catch (e) {
-            console.error('Failed to log message to Supabase:', e)
+            logger.error('Supabase', 'Failed to log message to Supabase:', e)
         }
     })
 }
@@ -75,7 +76,7 @@ export function logIncomingMessage(log: MessageLog) {
  */
 export async function tryInsertMessageLog(log: MessageLog): Promise<boolean> {
     const supabase = getSupabase()
-    if (!supabase) return true // No Supabase config — assume new, allow through
+    if (!supabase) return true // No Supabase config — fail-open, allow through
 
     try {
         const { error } = await supabase
@@ -85,16 +86,15 @@ export async function tryInsertMessageLog(log: MessageLog): Promise<boolean> {
         if (error) {
             // PostgreSQL unique violation — already processed this message_id
             if (error.code === '23505') {
-                console.log(`[dedup] Duplicate message_id skipped: ${log.message_id}`)
                 return false
             }
             // Any other error — log it but allow through (don't block the user)
-            console.error('[dedup] Insert error:', error.message)
+            logger.error('Supabase', 'Error in tryInsertMessageLog:', error)
         }
 
         return true
-    } catch (e) {
-        console.error('[dedup] Unexpected error:', e)
+    } catch (err) {
+        logger.error('Supabase', 'Exception in tryInsertMessageLog:', err)
         return true // Fail open — don't block user due to DB error
     }
 }
@@ -119,10 +119,10 @@ export function logErrorEvent(errorMessage: string, context?: any) {
                 }])
 
             if (error) {
-                console.error('Supabase error event logging error:', error.message)
+                logger.error('Supabase', 'Supabase error event logging error:', error.message)
             }
         } catch (e) {
-            console.error('Failed to log error event to Supabase:', e)
+            logger.error('Supabase', 'Failed to log error event to Supabase:', e)
         }
     })
 }

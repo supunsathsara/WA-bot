@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase.js'
+import { logger } from '../utils/logger.js'
 
 /**
  * Normalize a phone number by stripping the leading '+' prefix.
@@ -35,7 +36,7 @@ async function refreshCacheFromSupabase(): Promise<void> {
             .select('phone_number')
 
         if (error) {
-            console.error('[allowlist] Failed to load from Supabase:', error.message)
+            logger.error('Allowlist', 'Failed to load from Supabase:', error.message)
             return
         }
 
@@ -44,9 +45,9 @@ async function refreshCacheFromSupabase(): Promise<void> {
         }
 
         cacheLoadedAt = now
-        console.log(`[allowlist] Cache refreshed. ${allowedNumbersCache.size} numbers loaded.`)
+        logger.info('Allowlist', `Cache refreshed. ${allowedNumbersCache.size} numbers loaded.`)
     } catch (e) {
-        console.error('[allowlist] Cache refresh error:', e)
+        logger.error('Allowlist', 'Cache refresh error:', e)
     }
 }
 
