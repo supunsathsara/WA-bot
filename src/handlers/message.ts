@@ -11,7 +11,18 @@ import {
 } from '../services/whatsapp.js'
 import { initSupabase, logIncomingMessage, logErrorEvent } from '../services/supabase.js'
 import { seedFromEnv, isAllowed, addAllowedNumber, removeAllowedNumber } from '../services/allowlist.js'
-import { initRedis, tryProcessMessage, hasUserBeenNotified, markUserAsNotified, checkRateLimit, hasUserHitLimitWarning, markUserLimitWarned } from '../services/redis.js'
+import {
+    initRedis,
+    tryProcessMessage,
+    hasUserBeenNotified,
+    markUserAsNotified,
+    checkRateLimit,
+    hasUserHitLimitWarning,
+    markUserLimitWarned,
+    getTrainSession,
+    setTrainSession,
+    clearTrainSession
+} from '../services/redis.js'
 
 /**
  * Handle incoming WhatsApp messages
@@ -176,14 +187,110 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
         }
 
         // ─── Interactive Button Routing ─────────────────────────────────────
-        if (interactiveButtonId) {
-            if (interactiveButtonId === 'cmd_train') {
-                console.log('Train menu button clicked, fetching availability...')
-                const result = await fetchTrainAvailability('47', '1', undefined, 1)
+        // ─── Train Finder ───────────────────────────────────────────────────
+        if (messageBody.toLowerCase().startsWith('/train')) {
+            const parts = messageBody.split(' ')
+            const dateArg = parts[1]
+
+            // If user provides a date directly (e.g. "/train 2025-12-25"), bypass interactive flow
+            if (dateArg && /^\d{4}-\d{2}-\d{2}$/.test(dateArg)) {
+                console.log('Direct train command received, fetching availability...')
+                await sendTextMessage(config, from, '🔍 Searching for trains...', messageId)
+                const result = await fetchTrainAvailability('47', '1', dateArg, 1)
                 const replyMessage = formatTrainMessage(result)
                 await sendTextMessage(config, from, replyMessage, messageId)
                 return
             }
+        }
+
+        // ─── Train Finder: Initial Trigger (Interactive Flow) ───────────────
+        if (interactiveButtonId === 'cmd_train' || messageBody.toLowerCase() === '/train') {
+            console.log('Starting train finder flow...')
+            await setTrainSession(from, { step: 'awaiting_origin' })
+            
+            const bodyText = '🚂 *Train Finder*\n\nWhere are you departing from?'
+            const buttons = [
+                { id: 'train_org_47', title: '📍 Galle' },
+                { id: 'train_org_1', title: '📍 Colombo Fort' },
+                { id: 'train_org_50', title: '📍 Matara' },
+            ]
+            await sendInteractiveButtons(config, from, bodyText, buttons, messageId)
+            return
+        }
+
+        // ─── Train Finder: Interactive Flow ───────────────────────────────
+        if (interactiveButtonId?.startsWith('train_org_')) {
+            const originId = interactiveButtonId.replace('train_org_', '')
+            const session = await getTrainSession(from)
+            if (session?.step === 'awaiting_origin') {
+                await setTrainSession(from, { step: 'awaiting_destination', origin: originId })
+                
+                const bodyText = '🚂 *Train Finder*\n\nWhere are you heading to?'
+                const allButtons = [
+                    { id: 'train_dst_47', title: '🏁 Galle' },
+                    { id: 'train_dst_1', title: '🏁 Colombo Fort' },
+                    { id: 'train_dst_50', title: '🏁 Matara' },
+                ]
+                // Filter out the origin so they can't travel to the same place
+                const buttons = allButtons.filter(b => b.id !== `train_dst_${originId}`)
+
+                await sendInteractiveButtons(config, from, bodyText, buttons, messageId)
+                return
+            }
+        }
+
+        if (interactiveButtonId?.startsWith('train_dst_')) {
+            const destId = interactiveButtonId.replace('train_dst_', '')
+            const session = await getTrainSession(from)
+            if (session?.step === 'awaiting_destination' && session.origin) {
+                await setTrainSession(from, { step: 'awaiting_date', origin: session.origin, destination: destId })
+                
+                const bodyText = '🚂 *Train Finder*\n\nWhen are you traveling?'
+                const buttons = [
+                    { id: 'train_date_today', title: '📅 Today' },
+                    { id: 'train_date_tomorrow', title: '📅 Tomorrow' },
+                    { id: 'train_date_next_monday', title: '📅 Next Monday' },
+                ]
+                await sendInteractiveButtons(config, from, bodyText, buttons, messageId)
+                return
+            }
+        }
+
+        if (interactiveButtonId?.startsWith('train_date_')) {
+            const dateSelection = interactiveButtonId.replace('train_date_', '')
+            const session = await getTrainSession(from)
+            
+            if (session?.step === 'awaiting_date' && session.origin && session.destination) {
+                // Determine date
+                const targetDate = new Date()
+                if (dateSelection === 'tomorrow') {
+                    targetDate.setDate(targetDate.getDate() + 1)
+                } else if (dateSelection === 'next_monday') {
+                    const dayOfWeek = targetDate.getDay() // 0 = Sun, 1 = Mon, etc.
+                    const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek) % 7 || 7
+                    targetDate.setDate(targetDate.getDate() + daysUntilMonday)
+                }
+                
+                // Format as YYYY-MM-DD
+                const yyyy = targetDate.getFullYear()
+                const mm = String(targetDate.getMonth() + 1).padStart(2, '0')
+                const dd = String(targetDate.getDate()).padStart(2, '0')
+                const dateString = `${yyyy}-${mm}-${dd}`
+
+                console.log(`Executing train search for ${session.origin} -> ${session.destination} on ${dateString}`)
+                await sendTextMessage(config, from, '🔍 Searching for trains...', messageId)
+                
+                const result = await fetchTrainAvailability(session.origin, session.destination, dateString, 1)
+                const replyMessage = formatTrainMessage(result)
+                
+                await sendTextMessage(config, from, replyMessage, messageId)
+                await clearTrainSession(from)
+                return
+            }
+        }
+
+        // ─── Help & Admin Routing ──────────────────────────────────────────
+        if (interactiveButtonId) {
             if (interactiveButtonId === 'cmd_help') {
                 const helpText = [
                     '🔗 *Media Downloads*',
@@ -210,25 +317,6 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
                 await sendTextMessage(config, from, adminText, messageId)
                 return
             }
-        }
-
-        // ─── /train command ────────────────────────────────────────────────
-        if (messageBody.toLowerCase().startsWith('/train')) {
-            console.log('Train command received, fetching availability...')
-
-            const parts = messageBody.split(' ')
-            const dateArg = parts[1]
-
-            let searchDate: string | undefined
-            if (dateArg && /^\d{4}-\d{2}-\d{2}$/.test(dateArg)) {
-                searchDate = dateArg
-            }
-
-            const result = await fetchTrainAvailability('47', '1', searchDate, 1)
-            const replyMessage = formatTrainMessage(result)
-
-            await sendTextMessage(config, from, replyMessage, messageId)
-            console.log('Train availability sent successfully')
         }
 
         // ─── TikTok URL ────────────────────────────────────────────────────

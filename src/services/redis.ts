@@ -137,3 +137,53 @@ export async function markUserLimitWarned(phoneNumber: string): Promise<void> {
         await redis.set(key, '1', { ex: 86400 })
     } catch (e) { }
 }
+
+// ─── Train Finder State Management ──────────────────────────────────────────
+
+export interface TrainSession {
+    step: 'awaiting_origin' | 'awaiting_destination' | 'awaiting_date'
+    origin?: string       // e.g. '47' (Galle)
+    destination?: string  // e.g. '1'  (Colombo Fort)
+}
+
+/**
+ * Retrieve the current Train Finder session for a user.
+ */
+export async function getTrainSession(phoneNumber: string): Promise<TrainSession | null> {
+    if (!redis) return null
+    try {
+        const key = `train_session:${phoneNumber}`
+        const data = await redis.get<TrainSession>(key)
+        return data || null
+    } catch (e) {
+        console.error('[redis] error getting train session', e)
+        return null
+    }
+}
+
+/**
+ * Save or update the Train Finder session for a user.
+ * EX 600: Expires automatically after 10 minutes.
+ */
+export async function setTrainSession(phoneNumber: string, session: TrainSession): Promise<void> {
+    if (!redis) return
+    try {
+        const key = `train_session:${phoneNumber}`
+        await redis.set(key, session, { ex: 600 })
+    } catch (e) {
+        console.error('[redis] error setting train session', e)
+    }
+}
+
+/**
+ * Delete the Train Finder session for a user (e.g. after successful completion).
+ */
+export async function clearTrainSession(phoneNumber: string): Promise<void> {
+    if (!redis) return
+    try {
+        const key = `train_session:${phoneNumber}`
+        await redis.del(key)
+    } catch (e) {
+        console.error('[redis] error clearing train session', e)
+    }
+}
