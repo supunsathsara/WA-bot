@@ -23,6 +23,31 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
     const phoneNumberId = value.metadata.phone_number_id
     const from = message.from
     const messageId = message.id
+    
+    // Initialize Supabase configuration if present
+    const { SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY } = env(c) as any;
+    if (SUPABASE_PROJECT_ID && SUPABASE_SECRET_KEY) {
+        const { initSupabase, logIncomingMessage } = await import('../services/supabase.js');
+        initSupabase(SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY);
+        
+        let contentStr = '';
+        if (message.type === 'text') {
+            contentStr = message.text.body;
+        } else if (message.type === 'interactive' && message.interactive) {
+            contentStr = JSON.stringify(message.interactive);
+        } else {
+            contentStr = `[${message.type} message]`;
+        }
+
+        // Fire and forget logging
+        logIncomingMessage({
+            phone_number_id: phoneNumberId,
+            sender_number: from,
+            message_id: messageId,
+            message_type: message.type,
+            content: contentStr
+        });
+    }
 
     // Only handle text messages
     if (message.type !== 'text') {
@@ -120,6 +145,18 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
         }
     } catch (error: any) {
         console.error('Error handling message:', error)
+
+        // Log error to Supabase
+        const { SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY } = env(c) as any;
+        if (SUPABASE_PROJECT_ID && SUPABASE_SECRET_KEY) {
+            const { initSupabase, logErrorEvent } = await import('../services/supabase.js');
+            initSupabase(SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY);
+            logErrorEvent(error instanceof Error ? error.message : String(error), { 
+                phoneNumberId, 
+                from, 
+                messageId 
+            });
+        }
 
         // Send error message to user
         try {
