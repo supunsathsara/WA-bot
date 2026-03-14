@@ -3,7 +3,12 @@ import { env } from 'hono/adapter'
 import { isTikTokUrl, fetchTikTokVideo } from '../services/tiktok.js'
 import { isInstagramUrl, fetchInstagramMedia } from '../services/instagram.js'
 import { fetchTrainAvailability, formatTrainMessage } from '../services/train.js'
-import { sendTextMessage, sendVideoMessage, sendImageMessage } from '../services/whatsapp.js'
+import {
+    sendTextMessage,
+    sendVideoMessage,
+    sendImageMessage,
+    sendInteractiveButtons,
+} from '../services/whatsapp.js'
 import { initSupabase, logIncomingMessage, logErrorEvent } from '../services/supabase.js'
 import { seedFromEnv, isAllowed, addAllowedNumber, removeAllowedNumber } from '../services/allowlist.js'
 import { initRedis, tryProcessMessage, hasUserBeenNotified, markUserAsNotified, checkRateLimit, hasUserHitLimitWarning, markUserLimitWarned } from '../services/redis.js'
@@ -113,13 +118,19 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
         }
     }
 
-    // Only handle text messages from here on
-    if (message.type !== 'text') {
+    // Only handle text and interactive messages from here on
+    if (message.type !== 'text' && message.type !== 'interactive') {
         return
     }
 
-    const messageBody = message.text.body
-    console.log(`Received message from ${from}: ${messageBody}`)
+    const messageBody = message.type === 'text' ? message.text.body : ''
+    const interactiveButtonId = message.type === 'interactive' ? message.interactive?.button_reply?.id : null
+
+    if (messageBody) {
+        console.log(`Received text message from ${from}: ${messageBody}`)
+    } else if (interactiveButtonId) {
+        console.log(`Received interactive button click from ${from}: ${interactiveButtonId}`)
+    }
 
     const config = {
         phoneNumberId,
@@ -160,6 +171,43 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
                 } else {
                     await sendTextMessage(config, from, `❌ Failed to remove ${target}: ${result.error}`, messageId)
                 }
+                return
+            }
+        }
+
+        // ─── Interactive Button Routing ─────────────────────────────────────
+        if (interactiveButtonId) {
+            if (interactiveButtonId === 'cmd_train') {
+                console.log('Train menu button clicked, fetching availability...')
+                const result = await fetchTrainAvailability('47', '1', undefined, 1)
+                const replyMessage = formatTrainMessage(result)
+                await sendTextMessage(config, from, replyMessage, messageId)
+                return
+            }
+            if (interactiveButtonId === 'cmd_help') {
+                const helpText = [
+                    '🔗 *Media Downloads*',
+                    '',
+                    '🎵  Send a *TikTok* link',
+                    '      _I\'ll extract and send the video_',
+                    '',
+                    '📸  Send an *Instagram* link',
+                    '      _I\'ll send the photo or video_',
+                ].join('\n')
+                await sendTextMessage(config, from, helpText, messageId)
+                return
+            }
+            if (interactiveButtonId === 'cmd_admin') {
+                const adminText = [
+                    '⚙️ *Admin Commands*',
+                    '',
+                    '🔓  `/allow <number>`',
+                    '      _Add a number to the allowlist_',
+                    '',
+                    '🔒  `/remove <number>`',
+                    '      _Remove a number from the allowlist_',
+                ].join('\n')
+                await sendTextMessage(config, from, adminText, messageId)
                 return
             }
         }
@@ -219,52 +267,23 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
 
         // ─── Help / default ─────────────────────────────────────────────────
         else {
-            const lines = [
+            const bodyText = [
                 '👋 *Hey there! Welcome to WA Bot* 🤖',
                 '',
-                '━━━━━━━━━━━━━━━━━━━━',
-                '',
-                '📋 *Available Commands*',
-                '',
-                '🚂  `/train`',
-                '      _Check train availability for tomorrow_',
-                '',
-                '🚂  `/train 2025-12-25`',
-                '      _Check for a specific date_',
-                '',
-                '━━━━━━━━━━━━━━━━━━━━',
-                '',
-                '🔗 *Media Downloads*',
-                '',
-                '🎵  Send a *TikTok* link',
-                '      _I\'ll extract and send the video_',
-                '',
-                '📸  Send an *Instagram* link',
-                '      _I\'ll send the photo or video_',
+                'What would you like to do today?',
+                '_Tap a button below to get started!_ ✨'
+            ].join('\n')
+
+            const buttons = [
+                { id: 'cmd_train', title: '🚂 Check Trains' },
+                { id: 'cmd_help', title: 'ℹ️ How to Use' },
             ]
 
             if (isAdmin) {
-                lines.push(
-                    '',
-                    '━━━━━━━━━━━━━━━━━━━━',
-                    '',
-                    '⚙️ *Admin Commands*',
-                    '',
-                    '🔓  `/allow <number>`',
-                    '      _Add a number to the allowlist_',
-                    '',
-                    '🔒  `/remove <number>`',
-                    '      _Remove a number from the allowlist_',
-                )
+                buttons.push({ id: 'cmd_admin', title: '⚙️ Admin Panel' })
             }
 
-            lines.push(
-                '',
-                '━━━━━━━━━━━━━━━━━━━━',
-                '_Just send a command or link to get started!_ ✨',
-            )
-
-            await sendTextMessage(config, from, lines.join('\n'), messageId)
+            await sendInteractiveButtons(config, from, bodyText, buttons, messageId)
         }
 
     } catch (error: any) {

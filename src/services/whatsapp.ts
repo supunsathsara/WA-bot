@@ -104,3 +104,55 @@ export async function sendImageMessage(
         })
     })
 }
+
+export interface InteractiveButton {
+    id: string
+    title: string
+}
+
+/**
+ * Send an interactive message with up to 3 reply buttons
+ */
+export async function sendInteractiveButtons(
+    config: WhatsAppConfig,
+    to: string,
+    bodyText: string,
+    buttons: InteractiveButton[],
+    replyToMessageId?: string
+): Promise<void> {
+    if (buttons.length === 0 || buttons.length > 3) {
+        throw new Error('Interactive messages require between 1 and 3 buttons')
+    }
+
+    await retryWithBackoff(async () => {
+        await axios({
+            method: 'POST',
+            url: `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/messages`,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${config.accessToken}`,
+            },
+            data: {
+                messaging_product: 'whatsapp',
+                to,
+                type: 'interactive',
+                interactive: {
+                    type: 'button',
+                    body: { text: bodyText },
+                    action: {
+                        buttons: buttons.map(btn => ({
+                            type: 'reply',
+                            reply: {
+                                id: btn.id,
+                                title: btn.title.substring(0, 20) // WhatsApp limit is 20 chars
+                            }
+                        }))
+                    }
+                },
+                ...(replyToMessageId && {
+                    context: { message_id: replyToMessageId },
+                }),
+            },
+        })
+    })
+}
