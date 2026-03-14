@@ -47,10 +47,11 @@ interface IGramMedia {
     success?: boolean
 }
 
-// Constants for IGram API 
+// Constants for IGram API (v2 — Feb 2026)
 const IGRAM_HOSTNAME = 'api-wh.igram.world'
-const IGRAM_KEY = '241c28282e4ce419ce73ca61555a5a0c7faf887c5ccf9305c55484f701ba883a'
-const IGRAM_TIMESTAMP = '1766415734394'
+const IGRAM_API_BASE = 'api.igram.world'
+const IGRAM_HMAC_KEY = '75f2d70d3724f98e4a7d1ffd0ba9cfd907f3ae2632ee159980e2c521bff62358'
+const IGRAM_STATIC_TS = 1771418815381 // parseInt("mls10xp1", 36)
 
 // Exact pattern from govd
 const EMBED_PATTERN = /new ServerJS\(\)\);s\.handle\((\{.*\})\);requireLazy/s
@@ -242,24 +243,66 @@ async function fetchFromEmbed(shortcode: string): Promise<InstagramMedia> {
 }
 
 /**
- * Build IGram signed payload 
+ * Fetch IGram server time for clock drift correction.
+ * Falls back to local time if the request fails.
  */
-function buildIGramPayload(contentUrl: string): URLSearchParams {
-    const timestamp = Date.now().toString()
+async function getIGramServerTime(): Promise<number> {
+    try {
+        const resp = await axios.get(`https://${IGRAM_API_BASE}/msec`, { timeout: 5000 })
+        if (resp.data?.msec) {
+            return Math.round(resp.data.msec * 1000)
+        }
+    } catch { /* ignore — fall back to local time */ }
+    return Date.now()
+}
 
-    // Create signature: sha256(url + timestamp + key)
-    const hash = crypto.createHash('sha256')
-    hash.update(contentUrl + timestamp + IGRAM_KEY)
-    const secret = hash.digest('hex').toLowerCase()
+/**
+ * Sign the IGram payload using HMAC-SHA256.
+ * Matches govd's igramSign(): HMAC(JSON.stringify(sorted_partial) + ts, hexKey)
+ */
+function igramSign(partial: Record<string, any>, ts: number): string {
+    // Sort keys alphabetically for deterministic JSON
+    const sorted: Record<string, any> = {}
+    for (const key of Object.keys(partial).sort()) {
+        sorted[key] = partial[key]
+    }
+    const data = JSON.stringify(sorted) + String(ts)
+    const keyBuffer = Buffer.from(IGRAM_HMAC_KEY, 'hex')
+    return crypto.createHmac('sha256', keyBuffer).update(data).digest('hex')
+}
 
-    const payload = new URLSearchParams()
-    payload.set('sf_url', contentUrl)
-    payload.set('ts', timestamp)
-    payload.set('_ts', IGRAM_TIMESTAMP)
-    payload.set('_tsc', '0')
-    payload.set('_s', secret)
+/**
+ * Build IGram v2 signed JSON payload.
+ */
+async function buildIGramPayload(contentUrl: string): Promise<string> {
+    const nowMs = Date.now()
+    const serverMs = await getIGramServerTime()
 
-    return payload
+    const drift = serverMs - nowMs
+    const correction = (drift >= 60000 || drift <= -60000) ? drift : 0
+    const ts = nowMs + correction
+
+    // Partial payload that gets signed
+    const partial: Record<string, any> = {
+        target_url: contentUrl,
+        _sc: 0,
+        _ef: 0,
+        _df: 0,
+    }
+
+    const sig = igramSign(partial, ts)
+
+    // Final payload with signature and timing fields
+    const final: Record<string, any> = {
+        ...partial,
+        ts,
+        _ts: IGRAM_STATIC_TS,
+        _tsc: correction,
+        _sv: 2,
+        _s: sig,
+    }
+
+    return JSON.stringify(final)
 }
 
 /**
@@ -276,17 +319,17 @@ function getCDNUrl(igramUrl: string): string {
 }
 
 /**
- * Method 2: Fetch from IGram API (fallback)
+ * Method 2: Fetch from IGram API v2 (fallback)
  */
 async function fetchFromIGram(shortcode: string): Promise<InstagramMedia> {
     const contentUrl = `https://www.instagram.com/p/${shortcode}/`
     const apiUrl = `https://${IGRAM_HOSTNAME}/api/convert`
 
-    const payload = buildIGramPayload(contentUrl)
+    const payload = await buildIGramPayload(contentUrl)
 
-    const response = await axios.post(apiUrl, payload.toString(), {
+    const response = await axios.post(apiUrl, payload, {
         headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/json',
             'Referer': 'https://igram.world/',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         },
