@@ -64,6 +64,42 @@ export function logIncomingMessage(log: MessageLog) {
 }
 
 /**
+ * Deduplication-aware message insert.
+ * Attempts to insert the message log row synchronously BEFORE processing.
+ * Returns:
+ *   true  → message is new, safe to process
+ *   false → message_id already exists (duplicate webhook), skip processing
+ *
+ * This uses the UNIQUE constraint on message_id as an atomic check-and-act,
+ * which is safe for concurrent/parallel serverless invocations.
+ */
+export async function tryInsertMessageLog(log: MessageLog): Promise<boolean> {
+    const supabase = getSupabase()
+    if (!supabase) return true // No Supabase config — assume new, allow through
+
+    try {
+        const { error } = await supabase
+            .from('message_logs')
+            .insert([log])
+
+        if (error) {
+            // PostgreSQL unique violation — already processed this message_id
+            if (error.code === '23505') {
+                console.log(`[dedup] Duplicate message_id skipped: ${log.message_id}`)
+                return false
+            }
+            // Any other error — log it but allow through (don't block the user)
+            console.error('[dedup] Insert error:', error.message)
+        }
+
+        return true
+    } catch (e) {
+        console.error('[dedup] Unexpected error:', e)
+        return true // Fail open — don't block user due to DB error
+    }
+}
+
+/**
  * Log an error event to Supabase.
  */
 export function logErrorEvent(errorMessage: string, context?: any) {
