@@ -4,6 +4,7 @@ import { handleIncomingMessage } from './handlers/message.js'
 import { fetchInstagramMedia, isInstagramUrl } from './services/instagram.js'
 import { fetchTikTokVideo, isTikTokUrl } from './services/tiktok.js'
 import { fetchTrainAvailability, formatTrainMessage } from './services/train.js'
+import { initSupabase, getSupabase } from './services/supabase.js'
 
 const app = new Hono()
 
@@ -84,7 +85,7 @@ app.get('/train', async (c) => {
   try {
     console.log('Testing train availability for date:', date || 'tomorrow')
     const result = await fetchTrainAvailability('47', '1', date, 1)
-    
+
     return c.json({
       success: true,
       data: result,
@@ -139,6 +140,39 @@ app.post('/webhook', async (c) => {
   } catch (error) {
     console.error('Error processing webhook:', error)
     return c.text('Internal Server Error', 500)
+  }
+})
+
+// Vercel Cron Job — keeps Supabase free tier from pausing due to inactivity.
+app.get('/api/cron/keepalive', async (c) => {
+  const { SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, CRON_SECRET } = env(c) as any
+
+  // Reject unauthorized calls (only Vercel cron should hit this)
+  const authHeader = c.req.header('Authorization')
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  if (!SUPABASE_PROJECT_ID || !SUPABASE_SECRET_KEY) {
+    return c.json({ error: 'Supabase not configured' }, 500)
+  }
+
+  try {
+    initSupabase(SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY)
+    const supabase = getSupabase()
+
+    // Lightweight query — just count rows, no data transfer
+    const { count, error } = await supabase!
+      .from('message_logs')
+      .select('*', { count: 'exact', head: true })
+
+    if (error) throw error
+
+    console.log(`[keepalive] Supabase pinged. message_logs row count: ${count}`)
+    return c.json({ ok: true, message_count: count, pinged_at: new Date().toISOString() })
+  } catch (err: any) {
+    console.error('[keepalive] Supabase ping failed:', err.message)
+    return c.json({ ok: false, error: err.message }, 500)
   }
 })
 
