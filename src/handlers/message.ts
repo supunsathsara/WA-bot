@@ -2,8 +2,8 @@ import { Context } from 'hono'
 import { env } from 'hono/adapter'
 import { logger } from '../utils/logger.js'
 
-// Services
-import { sendTextMessage, sendInteractiveButtons } from '../services/whatsapp.js'
+// WhatsApp Handlers
+import { sendTextMessage, sendInteractiveButtons, sendImageMessage, downloadMedia, uploadMedia } from '../services/whatsapp.js'
 import { initSupabase, logIncomingMessage, logErrorEvent } from '../services/supabase.js'
 import { seedFromEnv, isAllowed } from '../services/allowlist.js'
 import {
@@ -17,7 +17,7 @@ import {
     getUncensoredMode,
 } from '../services/redis.js'
 import { initGroq, chatWithAI } from '../services/groq.js'
-import { chatWithUncensoredAI } from '../services/huggingface.js'
+import { chatWithUncensoredAI, generateImage, editImage } from '../services/huggingface.js'
 
 // Controllers
 import { handleAdminCommand } from '../controllers/admin.js'
@@ -35,7 +35,7 @@ import { handleTikTokUrl, handleInstagramUrl } from '../controllers/media.js'
  *   5. Route to the appropriate controller
  */
 export async function handleIncomingMessage(c: Context, body: any): Promise<void> {
-    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER, REDIS_URL, GROQ_API_KEY, HUGGINGFACE_API_KEY } = env(c) as any
+    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER, REDIS_URL, GROQ_API_KEY, HUGGINGFACE_API_KEY, HF_IMAGE_MODEL } = env(c) as any
 
     // ── Validate webhook payload ──────────────────────────────────────────
     if (!body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
@@ -121,15 +121,16 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
     }
 
     // ── 5. Route to controllers ───────────────────────────────────────────
-    if (message.type !== 'text' && message.type !== 'interactive') return
+    const messageType = message.type
+    if (messageType !== 'text' && messageType !== 'interactive' && messageType !== 'image') return
 
-    const messageBody = message.type === 'text' ? message.text.body : ''
-    const interactiveButtonId = message.type === 'interactive'
-        ? message.interactive?.button_reply?.id
-        : null
+    const messageBody = messageType === 'text' ? message.text.body : ''
+    const interactiveButtonId = messageType === 'interactive' ? message.interactive?.button_reply?.id : null
+    const imageMediaId = messageType === 'image' ? message.image?.id : null
+    const imageCaption = messageType === 'image' ? message.image?.caption || '' : ''
 
-    if (messageBody) {
-        logger.info('Router', `Text from ${from}: ${messageBody}`)
+    if (messageBody || imageCaption) {
+        logger.info('Router', `Message from ${from}: ${messageBody || imageCaption}`)
     } else if (interactiveButtonId) {
         logger.info('Router', `Button from ${from}: ${interactiveButtonId}`)
     }
@@ -156,6 +157,54 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
         // ── Train: interactive step buttons ──────────────────────────
         if (interactiveButtonId?.startsWith('train_')) {
             if (await handleTrainInteraction(config, from, interactiveButtonId, messageId)) return
+        }
+
+        // ── AI Image Generation (/imagine) ───────────────────────────
+        if (isAdmin) {
+            let isImagineCommand = false;
+            let imaginePrompt = '';
+
+            if (messageType === 'text' && messageBody.toLowerCase().startsWith('/imagine ')) {
+                isImagineCommand = true;
+                imaginePrompt = messageBody.substring(9).trim();
+            } else if (messageType === 'image' && imageCaption.toLowerCase().startsWith('/imagine ')) {
+                isImagineCommand = true;
+                imaginePrompt = imageCaption.substring(9).trim();
+            }
+
+            if (isImagineCommand && imaginePrompt) {
+                const targetModel = HF_IMAGE_MODEL || 'stabilityai/stable-diffusion-xl-base-1.0' // Highly capable free default
+
+                await sendTextMessage(config, from, "🎨 *Processing your vision...*\n_This may take up to 20 seconds. Please wait._", messageId)
+
+                try {
+                    let generatedBlob: Blob | null = null;
+                    
+                    if (messageType === 'text') {
+                        generatedBlob = await generateImage(imaginePrompt, HUGGINGFACE_API_KEY, targetModel)
+                    } else if (messageType === 'image' && imageMediaId) {
+                        const downloaded = await downloadMedia(imageMediaId, WHATSAPP_TOKEN)
+                        if (downloaded) {
+                            generatedBlob = await editImage(downloaded.blob, imaginePrompt, HUGGINGFACE_API_KEY, targetModel)
+                        }
+                    }
+
+                    if (generatedBlob) {
+                        const uploadedMediaId = await uploadMedia(config, generatedBlob, 'image/jpeg')
+                        if (uploadedMediaId) {
+                            await sendImageMessage(config, from, { id: uploadedMediaId }, undefined, messageId)
+                            return
+                        }
+                    }
+
+                    await sendTextMessage(config, from, "❌ *Image Generation Failed.*\nThe inference server might be asleep or experiencing heavy load. Please try again soon.", messageId)
+                    return
+                } catch (e: any) {
+                    logger.error('Router', 'Imagine Error:', e.message)
+                    await sendTextMessage(config, from, "❌ *Image Generation Error.*\nCheck backend logs.", messageId)
+                    return
+                }
+            }
         }
 
         // ── Help & Admin info buttons ────────────────────────────────

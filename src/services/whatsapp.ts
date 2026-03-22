@@ -72,16 +72,17 @@ export async function sendVideoMessage(
 }
 
 /**
- * Send an image message via WhatsApp API
+ * Send an image message via WhatsApp API (Supports URL or Media ID)
  */
 export async function sendImageMessage(
     config: WhatsAppConfig,
     to: string,
-    imageUrl: string,
+    media: { url?: string; id?: string },
     caption?: string,
     replyToMessageId?: string
 ): Promise<void> {
     await retryWithBackoff(async () => {
+        const imagePayload = media.id ? { id: media.id } : { link: media.url }
         await axios({
             method: 'POST',
             url: `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/messages`,
@@ -94,7 +95,7 @@ export async function sendImageMessage(
                 to,
                 type: 'image',
                 image: {
-                    link: imageUrl,
+                    ...imagePayload,
                     ...(caption && { caption }),
                 },
                 ...(replyToMessageId && {
@@ -155,4 +156,61 @@ export async function sendInteractiveButtons(
             },
         })
     })
+}
+
+/**
+ * Download media from WhatsApp Graph API
+ */
+export async function downloadMedia(mediaId: string, accessToken: string): Promise<{ blob: Blob, mimeType: string } | null> {
+    try {
+        // Step 1: Retrieve the media URL
+        const metadataRes = await axios.get(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${mediaId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        })
+        const url = metadataRes.data.url
+        const mimeType = metadataRes.data.mime_type
+        
+        // Step 2: Download the binary Blob
+        const fetchRes = await fetch(url, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        })
+        if (!fetchRes.ok) throw new Error(`Fetch binary failed: ${fetchRes.statusText}`)
+        
+        const blob = await fetchRes.blob()
+        return { blob, mimeType }
+    } catch (err: any) {
+        console.error('WhatsApp Download Media Error:', err.message)
+        return null
+    }
+}
+
+/**
+ * Upload binary media to WhatsApp Graph API to receive a Media ID for sending
+ */
+export async function uploadMedia(config: WhatsAppConfig, fileBlob: Blob, mimeType: string): Promise<string | null> {
+    try {
+        const formData = new FormData()
+        formData.append('messaging_product', 'whatsapp')
+        formData.append('type', mimeType)
+        formData.append('file', fileBlob, 'media.png')
+
+        const res = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/media`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${config.accessToken}`
+                // DO NOT set Content-Type header manually when using FormData
+            },
+            body: formData as any
+        })
+        
+        if (!res.ok) {
+            throw new Error(`Media upload failed: ${await res.text()}`)
+        }
+        
+        const data = await res.json() as any
+        return data.id
+    } catch (err: any) {
+        console.error('WhatsApp Upload Media Error:', err.message)
+        return null
+    }
 }

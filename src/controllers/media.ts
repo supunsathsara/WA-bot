@@ -50,7 +50,7 @@ export async function handleInstagramUrl(
     } else {
         await Promise.all(
             media.mediaUrls.map((url, i) =>
-                sendImageMessage(config, from, url, i === 0 ? caption : undefined, messageId)
+                sendImageMessage(config, from, { url }, i === 0 ? caption : undefined, messageId)
             )
         )
     }
