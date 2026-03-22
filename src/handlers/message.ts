@@ -295,5 +295,8 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
         } catch (sendError) {
             logger.error('Webhook', 'Failed to send error message', sendError)
         }
+    } finally {
+        // Flush all buffered Axiom events before the serverless function exits
+        await logger.flush()
     }
 }

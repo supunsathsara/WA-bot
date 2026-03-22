@@ -2,6 +2,7 @@
   "name": "hono",
   "type": "module",
   "dependencies": {
+    "@axiomhq/js": "^1.5.0",
     "@huggingface/inference": "^4.13.15",
     "@supabase/supabase-js": "^2.99.1",
     "@upstash/ratelimit": "^2.0.8",

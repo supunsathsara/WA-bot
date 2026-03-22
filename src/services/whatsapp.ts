@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { retryWithBackoff } from '../utils/retry.js'
+import { logger } from '../utils/logger.js'
 
 const WHATSAPP_API_VERSION = 'v21.0'
 
@@ -179,7 +180,7 @@ export async function downloadMedia(mediaId: string, accessToken: string): Promi
         const blob = await fetchRes.blob()
         return { blob, mimeType }
     } catch (err: any) {
-        console.error('WhatsApp Download Media Error:', err.message)
+        logger.error('WhatsApp', `Download Media Error: ${err.message}`)
         return null
     }
 }
@@ -210,7 +211,7 @@ export async function uploadMedia(config: WhatsAppConfig, fileBlob: Blob, mimeTy
         const data = await res.json() as any
         return data.id
     } catch (err: any) {
-        console.error('WhatsApp Upload Media Error:', err.message)
+        logger.error('WhatsApp', `Upload Media Error: ${err.message}`)
         return null
     }
 }

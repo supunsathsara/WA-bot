@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@axiomhq/js':
+        specifier: ^1.5.0
+        version: 1.5.0
       '@huggingface/inference':
         specifier: ^4.13.15
         version: 4.13.15
@@ -44,6 +47,10 @@ importers:
         version: 5.9.3
 
 packages:
+
+  '@axiomhq/js@1.5.0':
+    resolution: {integrity: sha512-7SkfgnrKpjRs86h4TIcoZQ1TltKG0+WcQtMkBa5N3iSuGT5+aIpnbLFrRfbfhwhxzysQkF01qNW4fNUtePqjDg==}
+    engines: {node: '>=20'}
 
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==}
@@ -300,6 +307,9 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  fetch-retry@6.0.0:
+    resolution: {integrity: sha512-BUFj1aMubgib37I3v4q78fYo63Po7t4HUPTpQ6/QE6yK6cIQrP+W43FYToeTEyg5m2Y7eFUtijUuAv/PDlWuag==}
+
   follow-redirects@1.15.11:
     resolution: {integrity: sha512-deG2P0JfjrTxl50XGCDyfI97ZGVCxIpfKYmfyrQ54n5FO/0gfIES8C/Psl6kWVDolizcaaxZJnTS0QSMxvnsBQ==}
     engines: {node: '>=4.0'}
@@ -420,6 +430,10 @@ packages:
         optional: true
 
 snapshots:
+
+  '@axiomhq/js@1.5.0':
+    dependencies:
+      fetch-retry: 6.0.0
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
@@ -639,6 +653,8 @@ snapshots:
       '@esbuild/win32-arm64': 0.25.12
       '@esbuild/win32-ia32': 0.25.12
       '@esbuild/win32-x64': 0.25.12
+
+  fetch-retry@6.0.0: {}
 
   follow-redirects@1.15.11: {}
 
