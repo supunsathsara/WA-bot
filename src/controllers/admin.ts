@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.js'
 import { sendTextMessage, WhatsAppConfig } from '../services/whatsapp.js'
 import { addAllowedNumber, removeAllowedNumber } from '../services/allowlist.js'
+import { setUncensoredMode } from '../services/redis.js'
 
 /**
  * Handle admin-only text commands (/allow, /remove).
@@ -51,6 +52,19 @@ export async function handleAdminCommand(
         } else {
             await sendTextMessage(config, from, `❌ Failed to remove ${target}: ${result.error}`, messageId)
         }
+        return true
+    }
+
+    // ─── /uncensored on|off ────────────────────────────────────────
+    if (lower === '/uncensored on') {
+        await setUncensoredMode(from, true)
+        await sendTextMessage(config, from, '🔓 *Uncensored Mode Activated*\nYour future chats will be routed through the unrestricted OpenRouter model.', messageId)
+        return true
+    }
+
+    if (lower === '/uncensored off') {
+        await setUncensoredMode(from, false)
+        await sendTextMessage(config, from, '🔒 *Uncensored Mode Deactivated*\nYour chats are back to standard safe mode.', messageId)
         return true
     }
 

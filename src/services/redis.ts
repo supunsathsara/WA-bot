@@ -190,3 +190,34 @@ export async function clearTrainSession(phoneNumber: string): Promise<void> {
         logger.error('Redis', 'Error clearing train session', e)
     }
 }
+
+// ─── Uncensored Model State Management ────────────────────────────────────
+
+/**
+ * Check if the uncensored model is toggled ON for a user.
+ */
+export async function getUncensoredMode(phoneNumber: string): Promise<boolean> {
+    if (!redis) return false
+    try {
+        const key = `uncensored_mode:${phoneNumber}`
+        const mode = await redis.get(key)
+        // Upstash might return literal true or string 'true'
+        return mode === true || mode === 'true'
+    } catch (e) {
+        logger.error('Redis', 'Error getting uncensored mode', e)
+        return false
+    }
+}
+
+/**
+ * Toggle the uncensored model ON or OFF for a user.
+ */
+export async function setUncensoredMode(phoneNumber: string, enabled: boolean): Promise<void> {
+    if (!redis) return
+    try {
+        const key = `uncensored_mode:${phoneNumber}`
+        await redis.set(key, enabled.toString())
+    } catch (e) {
+        logger.error('Redis', 'Error setting uncensored mode', e)
+    }
+}
