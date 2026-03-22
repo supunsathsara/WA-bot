@@ -15,6 +15,7 @@ import {
     hasUserHitLimitWarning,
     markUserLimitWarned,
 } from '../services/redis.js'
+import { initGroq, chatWithAI } from '../services/groq.js'
 
 // Controllers
 import { handleAdminCommand } from '../controllers/admin.js'
@@ -32,7 +33,7 @@ import { handleTikTokUrl, handleInstagramUrl } from '../controllers/media.js'
  *   5. Route to the appropriate controller
  */
 export async function handleIncomingMessage(c: Context, body: any): Promise<void> {
-    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER, REDIS_URL } = env(c) as any
+    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER, REDIS_URL, GROQ_API_KEY } = env(c) as any
 
     // ── Validate webhook payload ──────────────────────────────────────────
     if (!body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
@@ -47,6 +48,7 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
 
     // ── 1. Initialize services ────────────────────────────────────────────
     initRedis(REDIS_URL)
+    initGroq(GROQ_API_KEY)
     if (SUPABASE_PROJECT_ID && SUPABASE_SECRET_KEY) {
         initSupabase(SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY)
     }
@@ -188,7 +190,16 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
             if (await handleInstagramUrl(config, from, messageBody, messageId)) return
         }
 
-        // ── Default: show interactive menu ───────────────────────────
+        // ── Default: try AI fallback, else show interactive menu ───────────────────────────
+        if (messageBody) {
+            const aiReply = await chatWithAI(messageBody)
+            if (aiReply) {
+                logger.info('Groq', `AI replied to ${from}`)
+                await sendTextMessage(config, from, aiReply, messageId)
+                return
+            }
+        }
+
         const bodyText = [
             '👋 *Hey there! Welcome to WA Bot* 🤖',
             '',

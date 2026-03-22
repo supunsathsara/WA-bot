@@ -106,7 +106,7 @@ function predictSeat(availableSeats: number): SeatPrediction | undefined {
 }
 
 // Station codes
-const STATIONS: Record<string, string> = {
+export const STATIONS: Record<string, string> = {
     'GALLE': '47',
     'COLOMBO_FORT': '1',
     'MARADANA': '2',
@@ -142,8 +142,8 @@ function getNextMonday(): string {
  * Fetch train availability from Sri Lanka Railway
  */
 export async function fetchTrainAvailability(
-    fromStation: string = '47',  // Galle
-    toStation: string = '1',      // Colombo Fort
+    fromStationId: string = '47',  // Galle
+    toStationId: string = '1',      // Colombo Fort
     date?: string,                // YYYY-MM-DD format
     passengers: number = 1
 ): Promise<TrainSearchResult> {
@@ -151,6 +151,10 @@ export async function fetchTrainAvailability(
     if (!date) {
         date = getNextMonday()
     }
+
+    // Resolve human readable names for the parser
+    const fromStationName = Object.keys(STATIONS).find(k => STATIONS[k] === fromStationId) || fromStationId;
+    const toStationName = Object.keys(STATIONS).find(k => STATIONS[k] === toStationId) || toStationId;
 
     const html = await retryWithBackoff(async () => {
         // Step 1: Get CSRF token and session cookie
@@ -188,8 +192,8 @@ export async function fetchTrainAvailability(
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
             },
             data: new URLSearchParams({
-                fromSt: fromStation,
-                toSt: toStation,
+                fromSt: fromStationId,
+                toSt: toStationId,
                 depDate: date,
                 noOfUsers: passengers.toString(),
                 retDate: '',
@@ -199,13 +203,13 @@ export async function fetchTrainAvailability(
         return resPost.data as string;
     });
 
-    return parseTrainHtml(html, date)
+    return parseTrainHtml(html, date, fromStationName, toStationName)
 }
 
 /**
  * Parse train information from HTML response
  */
-function parseTrainHtml(html: string, date: string): TrainSearchResult {
+function parseTrainHtml(html: string, date: string, fromStationName: string, toStationName: string): TrainSearchResult {
     const trains: TrainInfo[] = []
 
     // Extract date from HTML if available
@@ -268,8 +272,8 @@ function parseTrainHtml(html: string, date: string): TrainSearchResult {
 
     return {
         date: resultDate,
-        fromStation: 'Galle',
-        toStation: 'Colombo Fort',
+        fromStation: fromStationName,
+        toStation: toStationName,
         trains,
         targetTrain,
     }
