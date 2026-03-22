@@ -15,7 +15,11 @@ export async function chatWithUncensoredAI(userMessage: string, apiKey: string):
                 'X-Title': 'WA Bot Admin',
             },
             body: JSON.stringify({
-                model: 'nousresearch/hermes-3-llama-3.1-405b:free', // highly compliant free model
+                models: [
+                    'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', // uncensored
+                    'nousresearch/hermes-3-llama-3.1-405b:free', // massive but often rate-limited
+                    'meta-llama/llama-3.2-3b-instruct:free' // highly reliable fallback
+                ],
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userMessage }
