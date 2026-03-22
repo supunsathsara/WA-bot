@@ -1,4 +1,4 @@
-import Groq from 'groq-sdk'
+import { Groq } from 'groq-sdk'
 import { logger } from '../utils/logger.js'
 import { fetchTrainAvailability, STATIONS } from './train.js'
 
