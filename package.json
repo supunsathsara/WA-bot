@@ -4,18 +4,18 @@
   "dependencies": {
     "@axiomhq/js": "^1.5.0",
     "@huggingface/inference": "^4.13.15",
-    "@supabase/supabase-js": "^2.99.1",
+    "@supabase/supabase-js": "^2.99.3",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
     "@upstash/workflow": "^1.1.1",
-    "axios": "^1.13.2",
+    "axios": "^1.13.6",
     "groq-sdk": "^1.1.1",
-    "hono": "^4.10.6",
+    "hono": "^4.12.8",
     "random-useragent": "^0.5.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.17",
-    "tsx": "^4.7.1",
-    "typescript": "^5.8.3"
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }
