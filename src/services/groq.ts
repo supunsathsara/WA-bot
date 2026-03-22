@@ -23,11 +23,13 @@ function getSriLankaDateString(): string {
 export async function chatWithAI(userMessage: string): Promise<string | null> {
     if (!isConfigured || !groq) return null
 
+    const stationNames = Object.keys(STATIONS).join(', ')
+
     const systemPrompt = `You are a friendly, helpful WhatsApp bot assistant in Sri Lanka.
 Your name is WA Bot. Keep your answers very short, concise, and conversational. Do not use bold/italics unless necessary.
 The current date in Sri Lanka is ${getSriLankaDateString()}.
 If the user asks about trains, ALWAYS use the get_train_schedule tool to check live availability.
-Supported stations and IDs: ${Object.entries(STATIONS).map(([k, v]) => `${k}=${v}`).join(', ')}.`
+Supported stations: ${stationNames}.`
 
     const messages: any[] = [
         { role: 'system', content: systemPrompt },
@@ -49,11 +51,11 @@ Supported stations and IDs: ${Object.entries(STATIONS).map(([k, v]) => `${k}=${v
                         parameters: {
                             type: 'object',
                             properties: {
-                                fromStationId: { type: 'string', description: 'Origin station ID (e.g. 47 for GALLE, 1 for COLOMBO_FORT)' },
-                                toStationId: { type: 'string', description: 'Destination station ID' },
+                                fromStation: { type: 'string', description: 'Origin station name exactly as listed in Supported stations (e.g. GALLE)' },
+                                toStation: { type: 'string', description: 'Destination station name exactly as listed in Supported stations' },
                                 date: { type: 'string', description: 'Date in YYYY-MM-DD format based on Sri Lanka time' }
                             },
-                            required: ['fromStationId', 'toStationId', 'date']
+                            required: ['fromStation', 'toStation', 'date']
                         }
                     }
                 }
@@ -70,10 +72,16 @@ Supported stations and IDs: ${Object.entries(STATIONS).map(([k, v]) => `${k}=${v
             for (const toolCall of responseMessage.tool_calls) {
                 if (toolCall.function.name === 'get_train_schedule') {
                     const args = JSON.parse(toolCall.function.arguments)
-                    logger.info('Groq', `Executing get_train_schedule(${args.fromStationId}, ${args.toStationId}, ${args.date})`)
+                    
+                    // Map AI's station name strings back to strictly valid IDs for the backend
+                    const sanitize = (s: string) => s ? s.toUpperCase().replace(/\s+/g, '_') : ''
+                    const fromId = STATIONS[sanitize(args.fromStation)] || STATIONS['GALLE'] // 47
+                    const toId = STATIONS[sanitize(args.toStation)] || STATIONS['COLOMBO_FORT'] // 1
+
+                    logger.info('Groq', `Executing get_train_schedule(from: ${args.fromStation} -> ${fromId}, to: ${args.toStation} -> ${toId}, date: ${args.date})`)
                     
                     try {
-                        const result = await fetchTrainAvailability(args.fromStationId, args.toStationId, args.date)
+                        const result = await fetchTrainAvailability(fromId, toId, args.date)
                         // Make result small to avoid max token issues and API clutter
                         const slimResult = {
                             date: result.date,
