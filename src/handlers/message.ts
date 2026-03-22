@@ -17,7 +17,7 @@ import {
     getUncensoredMode,
 } from '../services/redis.js'
 import { initGroq, chatWithAI } from '../services/groq.js'
-import { chatWithUncensoredAI } from '../services/openrouter.js'
+import { chatWithUncensoredAI } from '../services/huggingface.js'
 
 // Controllers
 import { handleAdminCommand } from '../controllers/admin.js'
@@ -35,7 +35,7 @@ import { handleTikTokUrl, handleInstagramUrl } from '../controllers/media.js'
  *   5. Route to the appropriate controller
  */
 export async function handleIncomingMessage(c: Context, body: any): Promise<void> {
-    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER, REDIS_URL, GROQ_API_KEY, OPEN_WRT_API_KEY } = env(c) as any
+    const { WHATSAPP_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_SECRET_KEY, ALLOWED_NUMBERS, ADMIN_NUMBER, REDIS_URL, GROQ_API_KEY, HUGGINGFACE_API_KEY } = env(c) as any
 
     // ── Validate webhook payload ──────────────────────────────────────────
     if (!body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
@@ -198,9 +198,9 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
             if (from === ADMIN_NUMBER) {
                 const isUncensored = await getUncensoredMode(from)
                 if (isUncensored) {
-                    const uncensoredReply = await chatWithUncensoredAI(messageBody, OPEN_WRT_API_KEY)
+                    const uncensoredReply = await chatWithUncensoredAI(messageBody, HUGGINGFACE_API_KEY)
                     if (uncensoredReply) {
-                        logger.info('OpenRouter', `Uncensored AI replied to Admin`)
+                        logger.info('HuggingFace', `Uncensored AI replied to Admin`)
                         await sendTextMessage(config, from, uncensoredReply, messageId)
                         return
                     }
