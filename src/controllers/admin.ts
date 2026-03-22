@@ -11,8 +11,12 @@ export async function handleAdminCommand(
     config: WhatsAppConfig,
     from: string,
     messageBody: string,
-    messageId: string
+    messageId: string,
+    adminNumber: string
 ): Promise<boolean> {
+    // SECURITY: Ensure only the admin can run these commands
+    if (from !== adminNumber) return false
+
     const lower = messageBody.toLowerCase()
 
     // ─── /allow <number> ─────────────────────────────────────────

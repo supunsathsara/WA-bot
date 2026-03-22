@@ -137,9 +137,9 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
     const config = { phoneNumberId, accessToken: WHATSAPP_TOKEN }
 
     try {
-        // ── Admin commands (/allow, /remove) ──────────────────────────
+        // ── Admin commands (/allow, /remove, /uncensored) ───────────
         if (isAdmin && messageBody) {
-            if (await handleAdminCommand(config, from, messageBody, messageId)) return
+            if (await handleAdminCommand(config, from, messageBody, messageId, ADMIN_NUMBER)) return
         }
 
         // ── Train: direct text command (/train <date>) ───────────────

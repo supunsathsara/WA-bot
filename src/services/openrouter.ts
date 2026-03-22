@@ -15,7 +15,7 @@ export async function chatWithUncensoredAI(userMessage: string, apiKey: string):
                 'X-Title': 'WA Bot Admin',
             },
             body: JSON.stringify({
-                model: 'nousresearch/hermes-3-llama-3.1-8b:free', // highly compliant free model
+                model: 'nousresearch/hermes-3-llama-3.1-405b:free', // highly compliant free model
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userMessage }
