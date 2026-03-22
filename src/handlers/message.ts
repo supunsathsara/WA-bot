@@ -15,6 +15,8 @@ import {
     hasUserHitLimitWarning,
     markUserLimitWarned,
     getUncensoredMode,
+    getConversationHistory,
+    pushConversationHistory,
 } from '../services/redis.js'
 import { initGroq, chatWithAI } from '../services/groq.js'
 import { chatWithUncensoredAI, generateImage, editImage } from '../services/huggingface.js'
@@ -247,9 +249,11 @@ export async function handleIncomingMessage(c: Context, body: any): Promise<void
             if (from === ADMIN_NUMBER) {
                 const isUncensored = await getUncensoredMode(from)
                 if (isUncensored) {
-                    const uncensoredReply = await chatWithUncensoredAI(messageBody, HUGGINGFACE_API_KEY)
+                    const history = await getConversationHistory(from)
+                    const uncensoredReply = await chatWithUncensoredAI(messageBody, HUGGINGFACE_API_KEY, history)
                     if (uncensoredReply) {
                         logger.info('HuggingFace', `Uncensored AI replied to Admin`)
+                        await pushConversationHistory(from, messageBody, uncensoredReply)
                         await sendTextMessage(config, from, uncensoredReply, messageId)
                         return
                     }

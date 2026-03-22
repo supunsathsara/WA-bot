@@ -217,7 +217,75 @@ export async function setUncensoredMode(phoneNumber: string, enabled: boolean): 
     try {
         const key = `uncensored_mode:${phoneNumber}`
         await redis.set(key, enabled.toString())
+        if (!enabled) await clearConversationHistory(phoneNumber)
     } catch (e) {
         logger.error('Redis', 'Error setting uncensored mode', e)
+    }
+}
+
+// ─── Conversational Memory (History Tracking) ─────────────────────────────────
+
+export interface ChatMessage {
+    role: 'user' | 'assistant'
+    content: string
+}
+
+const MAX_HISTORY = 6 // Strict free-tier limit: Keep only the last 6 messages (3 exchanges)
+const HISTORY_TTL = 3600 // 1 hour TTL on conversation memory
+
+/**
+ * Get the conversation history for the admin's session.
+ */
+export async function getConversationHistory(phoneNumber: string): Promise<ChatMessage[]> {
+    if (!redis) return []
+    try {
+        const key = `conv_history:${phoneNumber}`
+        const raw = await redis.get(key) as string | null
+        if (!raw) return []
+        return JSON.parse(raw) as ChatMessage[]
+    } catch (e) {
+        logger.error('Redis', 'Error getting conversational history', e)
+        return []
+    }
+}
+
+/**
+ * Append a user message and assistant reply to the conversation history.
+ */
+export async function pushConversationHistory(phoneNumber: string, userMsg: string, assistantMsg: string): Promise<void> {
+    if (!redis) return
+    try {
+        const key = `conv_history:${phoneNumber}`
+        const history = await getConversationHistory(phoneNumber)
+
+        history.push({ role: 'user', content: userMsg })
+        
+        // OPTIMIZATION: Truncate the AI's past responses in history to save input tokens.
+        // We only need the AI to remember the *gist* of what it said, not read an 800-token essay again.
+        // ~4 characters = 1 token. 400 chars is roughly 100 tokens.
+        const compressedAssistantMsg = assistantMsg.length > 400 
+            ? assistantMsg.substring(0, 397) + '...'
+            : assistantMsg
+
+        history.push({ role: 'assistant', content: compressedAssistantMsg })
+
+        // Trim to last MAX_HISTORY messages
+        const trimmed = history.slice(-MAX_HISTORY)
+        await redis.set(key, JSON.stringify(trimmed), { ex: HISTORY_TTL })
+    } catch (e) {
+        logger.error('Redis', 'Error pushing conversational history', e)
+    }
+}
+
+/**
+ * Clear the conversation history.
+ */
+export async function clearConversationHistory(phoneNumber: string): Promise<void> {
+    if (!redis) return
+    try {
+        const key = `conv_history:${phoneNumber}`
+        await redis.del(key)
+    } catch (e) {
+        logger.error('Redis', 'Error clearing conversational history', e)
     }
 }
