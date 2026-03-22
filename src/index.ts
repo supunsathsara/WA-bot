@@ -1,10 +1,12 @@
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
+import { serve, WorkflowBindings } from '@upstash/workflow/hono'
+import { queueBackgroundMessage } from './services/qstash.js'
 import { logger } from './utils/logger.js'
 import { handleIncomingMessage } from './handlers/message.js'
 import { initSupabase, getSupabase } from './services/supabase.js'
 
-const app = new Hono()
+const app = new Hono<{ Bindings: WorkflowBindings }>()
 
 // ── Health check ──────────────────────────────────────────────────────────
 app.get('/', (c) => {
@@ -36,7 +38,16 @@ app.post('/webhook', async (c) => {
         logger.debug('Webhook', `Incoming payload: ${JSON.stringify(body)}`)
 
         if (body.object === 'whatsapp_business_account') {
-            await handleIncomingMessage(c, body)
+            const { QSTASH_TOKEN, APP_URL, QSTASH_URL } = env(c) as Record<string, string>
+            
+            if (QSTASH_TOKEN && APP_URL) {
+                // Instantly offload the heavy AI processing to background queue using the robust Singleton service
+                await queueBackgroundMessage(QSTASH_TOKEN, APP_URL, body, QSTASH_URL)
+            } else {
+                // Fallback for local testing if QStash keys aren't set
+                logger.warn('Upstash', 'Missing QSTASH_TOKEN or APP_URL. Processing synchronously (risk of Vercel timeout).')
+                await handleIncomingMessage(c, body)
+            }
             return c.text('EVENT_RECEIVED', 200)
         } else {
             return c.text('Not Found', 404)
@@ -45,6 +56,23 @@ app.post('/webhook', async (c) => {
         logger.error('Webhook', 'Error processing webhook', error)
         return c.text('Internal Server Error', 500)
     }
+})
+
+// ── Background Workflow Handler (`/workflow`) ─────────────────────────────
+// This endpoint is completely secured by QStash signature verification.
+// It bypasses Vercel's 10-second timeout constraints because QStash handles the polling.
+app.post('/workflow', (c) => {
+    const handler = serve(async (context) => {
+        const body = context.requestPayload as any
+        
+        await context.run("process-whatsapp-message", async () => {
+            // Processing executed safely in the background
+            logger.info('Workflow', 'Executing background worker for WhatsApp payload.')
+            await handleIncomingMessage(c, body)
+        })
+    })
+
+    return handler(c as any)
 })
 
 // ── Supabase keepalive cron ───────────────────────────────────────────────

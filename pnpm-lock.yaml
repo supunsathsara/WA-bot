@@ -23,6 +23,9 @@ importers:
       '@upstash/redis':
         specifier: ^1.37.0
         version: 1.37.0
+      '@upstash/workflow':
+        specifier: ^1.1.1
+        version: 1.1.1(zod@4.3.6)
       axios:
         specifier: ^1.13.2
         version: 1.13.2
@@ -256,6 +259,9 @@ packages:
     resolution: {integrity: sha512-7qJHGxpQgQr9/vmeS1PktEwvNAF7TI4iJDi8Pu2CFZ9YUGHZH4fOP5TfYlZ4aVxfopnELiE4BS4FBjyK7V1/xQ==}
     engines: {node: '>=16.0.0'}
 
+  '@upstash/qstash@2.9.0-rc':
+    resolution: {integrity: sha512-T2VGOuK/XOFe+kppsANdiaXxpqPvnXl8XWmZzAtqZKsHWkBXPYqAvr/Pek8TZEKeOLAgc7wrl4Rm0KNqec9Fww==}
+
   '@upstash/ratelimit@2.0.8':
     resolution: {integrity: sha512-YSTMBJ1YIxsoPkUMX/P4DDks/xV5YYCswWMamU8ZIfK9ly6ppjRnVOyBhMDXBmzjODm4UQKcxsJPvaeFAijp5w==}
     peerDependencies:
@@ -263,6 +269,11 @@ packages:
 
   '@upstash/redis@1.37.0':
     resolution: {integrity: sha512-LqOJ3+XWPLSZ2rGSed5DYG3ixybxb8EhZu3yQqF7MdZX1wLBG/FRcI6xcUZXHy/SS7mmXWyadrud0HJHkOc+uw==}
+
+  '@upstash/workflow@1.1.1':
+    resolution: {integrity: sha512-1TWVoE8jS3bHcRGQlWgFg0j9J0MPMHD8Tm9Sq61Ix226d8S4LEwAQWPnHYxjxe5PWw/RUgMDOR8lhM62bzQWRg==}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
 
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
@@ -277,6 +288,9 @@ packages:
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
+
+  crypto-js@4.2.0:
+    resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
 
   delayed-stream@1.0.0:
     resolution: {integrity: sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==}
@@ -370,6 +384,9 @@ packages:
     resolution: {integrity: sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA==}
     engines: {node: '>=20.0.0'}
 
+  jose@5.10.0:
+    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
+
   json-stringify-safe@5.0.1:
     resolution: {integrity: sha512-ZClg6AaYvamvYEE82d3Iyd3vSSIjQ+odgjaTzRuO3s7toCdFKczob2i0zCh7JE8kWn17yvAWhUVxvqGwUalsRA==}
 
@@ -384,6 +401,10 @@ packages:
   mime-types@2.1.35:
     resolution: {integrity: sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==}
     engines: {node: '>= 0.6'}
+
+  neverthrow@7.2.0:
+    resolution: {integrity: sha512-iGBUfFB7yPczHHtA8dksKTJ9E8TESNTAx1UQWW6TzMF280vo9jdPYpLUXrMN1BCkPdHFdNG3fxOt2CUad8KhAw==}
+    engines: {node: '>=18'}
 
   proxy-from-env@1.1.0:
     resolution: {integrity: sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==}
@@ -428,6 +449,9 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
+
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
 snapshots:
 
@@ -574,6 +598,12 @@ snapshots:
     dependencies:
       '@upstash/redis': 1.37.0
 
+  '@upstash/qstash@2.9.0-rc':
+    dependencies:
+      crypto-js: 4.2.0
+      jose: 5.10.0
+      neverthrow: 7.2.0
+
   '@upstash/ratelimit@2.0.8(@upstash/redis@1.37.0)':
     dependencies:
       '@upstash/core-analytics': 0.0.10
@@ -582,6 +612,11 @@ snapshots:
   '@upstash/redis@1.37.0':
     dependencies:
       uncrypto: 0.1.3
+
+  '@upstash/workflow@1.1.1(zod@4.3.6)':
+    dependencies:
+      '@upstash/qstash': 2.9.0-rc
+      zod: 4.3.6
 
   asynckit@0.4.0: {}
 
@@ -601,6 +636,8 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
+
+  crypto-js@4.2.0: {}
 
   delayed-stream@1.0.0: {}
 
@@ -711,6 +748,8 @@ snapshots:
 
   iceberg-js@0.8.1: {}
 
+  jose@5.10.0: {}
+
   json-stringify-safe@5.0.1: {}
 
   math-intrinsics@1.1.0: {}
@@ -720,6 +759,8 @@ snapshots:
   mime-types@2.1.35:
     dependencies:
       mime-db: 1.52.0
+
+  neverthrow@7.2.0: {}
 
   proxy-from-env@1.1.0: {}
 
@@ -749,3 +790,5 @@ snapshots:
   undici-types@6.21.0: {}
 
   ws@8.19.0: {}
+
+  zod@4.3.6: {}

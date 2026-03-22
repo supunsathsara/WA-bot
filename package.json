@@ -7,6 +7,7 @@
     "@supabase/supabase-js": "^2.99.1",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
+    "@upstash/workflow": "^1.1.1",
     "axios": "^1.13.2",
     "groq-sdk": "^1.1.1",
     "hono": "^4.10.6",
